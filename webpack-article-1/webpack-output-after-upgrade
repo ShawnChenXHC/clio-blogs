@@ -1,0 +1,74 @@
+{
+"apollo-app.css"
+    =>"/assets/packs/apollo-app-1b57de1192c0bcfb1844bea00e7a9dee.css",
+"apollo-app.css.map"
+    =>"/assets/packs/apollo-app-1b57de1192c0bcfb1844bea00e7a9dee.css.map",
+"apollo-app.js"
+    =>"/assets/packs/apollo-app-f86cf3fb8d31de420cbaf3711f7b1da3.js",
+"apollo-app.js.map"
+    =>"/assets/packs/apollo-app-f86cf3fb8d31de420cbaf3711f7b1da3.js.map",
+"apollo-manifest.css"
+    =>"/assets/packs/apollo-manifest-1b57de1192c0bcfb1844bea00e7a9dee.css",
+"apollo-manifest.css.map"
+    =>"/assets/packs/apollo-manifest-1b57de1192c0bcfb1844bea00e7a9dee.css.map",
+"apollo-manifest.js"
+    =>"/assets/packs/apollo-manifest-95ee5cb5d1ef28e5dd6f1b300c6ed547.js",
+"apollo-manifest.js.map"
+    =>"/assets/packs/apollo-manifest-95ee5cb5d1ef28e5dd6f1b300c6ed547.js.map",
+"apollo-vendor.css"
+    =>"/assets/packs/apollo-vendor-1b57de1192c0bcfb1844bea00e7a9dee.css",
+"apollo-vendor.css.map"
+    =>"/assets/packs/apollo-vendor-1b57de1192c0bcfb1844bea00e7a9dee.css.map",
+"apollo-vendor.js"
+    =>"/assets/packs/apollo-vendor-41a800e3f6aaf4da4bd98332698a7003.js",
+"apollo-vendor.js.map"
+    =>"/assets/packs/apollo-vendor-41a800e3f6aaf4da4bd98332698a7003.js.map",
+"bank-accounts.js"
+    =>"/assets/packs/bank-accounts-3a47b6c561f21eafc922da6db41d1c5e.js",
+"bank-accounts.js.map"
+    =>"/assets/packs/bank-accounts-3a47b6c561f21eafc922da6db41d1c5e.js.map",
+"bugsnag-client.js"
+    =>"/assets/packs/bugsnag-client-bc46c057e9820471e152ba24d22ab385.js",
+"bugsnag-client.js.map"
+    =>"/assets/packs/bugsnag-client-bc46c057e9820471e152ba24d22ab385.js.map",
+"contacts.js"
+    =>"/assets/packs/contacts-c21b5b93a403c12b79ea6438f973288d.js",
+"contacts.js.map"
+    =>"/assets/packs/contacts-c21b5b93a403c12b79ea6438f973288d.js.map",
+"proximanova-bold.ttf"
+    =>"/assets/packs/proximanova-bold-05d772ed3df1f00a8e4cc283ff77d375.ttf",
+"proximanova-bold.woff"
+    =>"/assets/packs/proximanova-bold-244dc2d953253b1b0fa0785dee93ce12.woff",
+"proximanova-bold.woff2"
+    =>"/assets/packs/proximanova-bold-042488334b358686bb45ae40c946633c.woff2",
+"proximanova-regular.ttf"
+    =>"/assets/packs/proximanova-regular-21485ff24f7572844c3a760e56cba3f2.ttf",
+"proximanova-regular.woff"
+    =>"/assets/packs/proximanova-regular-eac755f6ee6fa4e67319bfb3401d3f4e.woff",
+"proximanova-regular.woff2"
+    =>"/assets/packs/proximanova-regular-a681588fcd7beace8f79917d87a6ba61.woff2",
+"proximanova-regularit.ttf"
+    =>"/assets/packs/proximanova-regularit-c6c1f2e56860f1a29e2df798935aea09.ttf",
+"proximanova-regularit.woff"
+    =>"/assets/packs/proximanova-regularit-1ceb6a3062dcdf0465c0b253028e53f4.woff",
+"proximanova-regularit.woff2"
+    =>"/assets/packs/proximanova-regularit-b170bc6d63096fcb954899632dd6f8d8.woff2",
+"proximanova-semibold.ttf"
+    =>"/assets/packs/proximanova-semibold-53ade259d212ee9665c6d30171a4898b.ttf",
+"proximanova-semibold.woff"
+    =>"/assets/packs/proximanova-semibold-c2d371098db54efb0d462fbd35954f15.woff",
+"proximanova-semibold.woff2"
+    =>"/assets/packs/proximanova-semibold-ea5369017a7e3ab481c239ee9358e8eb.woff2",
+"subscriptions.js"
+    =>"/assets/packs/subscriptions-1067e372e72feb45cd90eaaa9d5e8cd1.js",
+"subscriptions.js.map"
+    =>"/assets/packs/subscriptions-1067e372e72feb45cd90eaaa9d5e8cd1.js.map",
+"themisui-vendor.css"
+    =>"/assets/packs/themisui-vendor-1b57de1192c0bcfb1844bea00e7a9dee.css",
+"themisui-vendor.css.map"
+    =>"/assets/packs/themisui-vendor-1b57de1192c0bcfb1844bea00e7a9dee.css.map",
+"themisui-vendor.js"
+    =>"/assets/packs/themisui-vendor-12d7696776c895098f435eb5e6635d91.js",
+"themisui-vendor.js.map"
+    =>"/assets/packs/themisui-vendor-12d7696776c895098f435eb5e6635d91.js.map"
+}
