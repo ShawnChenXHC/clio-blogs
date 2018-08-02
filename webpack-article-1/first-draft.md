@@ -76,59 +76,11 @@ yarn upgrade webpack-dev-server@v3.1.4
 yarn add -D webpack-cli@v2.1.4
 ```
 
-The `mode` configuration is central to Webpack v4, so to avoid trouble down the road, we also decided to update our configuration files and set `mode` explicitly in all of our environments.
+## Compile God Damn It
 
+After the upgrade, our application was completely broken. This is where the actual work begins. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with the new specifications of Webpack v4. In no particular order, the following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
 
-After this,
-
-We divided our upgrade into three main milestones:
-1. Our application compiles and runs in both production
-
-
-With Webpack v4 being a breaking change, it is probable that most of these will
-start breaking once the new version is installed. So, our job was clear: Upgrade
-Webpack, resolve any breakages, and make the entire process as seamless as
-possible. Easy.
-
-We divided our upgrade into three main milestones:
-1. Get Webpack to compile and run in production and development mode
-2. Get Webpack to work in test
-3. Clean up and make additional adjustments
-
-## The Road to Compilation
-
-We use `yarn` to manage our Node modules. So to install Webpack v4, we simply
-ran
-```
-yarn upgrade webpack@v4.8.3
-```
-
-As a side note, when we ran this command, we immediately received incorrect
-peer dependency warnings from `yarn`, telling us to upgrade other packages such
-as `webpack-dev-server`.
-
-We prefer to specify exact versions in our Node modules. This helps us maintain
-consistent environments and prevents unexpected dependency upgrades.
-
-Coupled with this upgrade, we also immediately upgraded `webpack-dev-server` to
-`3.x.x` and added `webpack-cli`, which used to be a part of `webpack` but has
-been separated into another package in v4:
-```
-yarn upgrade webpack-dev-server@v3.1.4
-yarn add -D webpack-cli@v2.1.4
-```
-
-Since the `mode` configuration is central to Webpack v4, we also decided to set
-it properly right off the bat. We went into our shared configuration file and
-set the `mode` to `"none"` there in order to prevent Webpack from using
-`"production"` as the default. We went into our development configuration file
-and set the `mode` to `"development"`. Finally, we set the `mode` to
-`"production"` inside of our production configuration file.
-
-Webpack v4 was a breaking change, and boy, was our application broken. Nothing
-would compile. In the rest of this section, I will highlight the main changes
-we had to make in order to get our application compiling again and, hopefully,
-give you some tips so you may do the same.
+### Set Your Mode
 
 ### One Step At a Time
 
