@@ -95,6 +95,8 @@ Our strategy was to search for the loader/plugin on Github, look at their releas
 
 If you don't see any mentions of Webpack in the release history, check the Github issues for the package. There are still several loaders/plugins that have not yet upgraded themselves to be compatible with Webpack v4, and these will usually have one or more Github issues related to this incompatibility.
 
+Aside from issues that were resolved simply by upgrading a package, we also ran into a number of errors that were a little more unique. The following sections will describe three errors that we think a lot of people will also run into during their upgrade.
+
 ### CommonsChunkPlugin
 
 One of the errors we got during our upgrade was this:
