@@ -111,3 +111,162 @@ building newer versions of Clio. We use BuildKite as our continuous integration
  specified within the Karma options file. This meant things that weren't defined
  explicitly will revert to Webpack's defaults, for example, `mode` will be set
  to the default of `"production"`.
+
+
+
+
+ This time, the error itself is not as important as where the error came from.
+ Looking at the stack trace, we were able to see that the error originated from
+ `fork-ts-checker-webpack-plugin`.
+
+ What is happening here is that the `fork-ts-checker-webpack-plugin` is on an
+ older version and is trying to use a Webpack function that has been removed in
+ v4. Looking up the `fork-ts-checker-webpack-plugin` on GitHub and checking out
+ its release history, we were able to find that `v0.4.0` is the first version
+ for which Webpack v4 is supported. We thus upgrade this package:
+ ```
+ yarn upgrade fork-ts-checker-webpack-plugin@v0.4.1
+ ```
+
+ ### Upgrading Loaders
+
+ Back to the top of the cycle, we ran Webpack compile again. Error again:
+
+
+ This time, it looks like we were able to get past the plugins initialization
+ stage of Webpack. The error output was generated after Webpack started reading
+ files and resolving dependencies. Our particular error came from
+ `fast-sass-loader`.
+
+ Similar to what we did for `fork-ts-checker-plugin`, we searched online and was
+ able to find that `fast-sass-loader` only started supporting Webpack v4 in
+ `v1.4.1`. So we did an upgrade:
+ ```
+ yarn upgrade fast-sass-loader@v1.4.5
+ ```
+
+ Going back to the top of the cycle, we quickly discovered that we had to do the
+ same for a bunch of other loaders as well. In all cases, similar errors
+ and, looking online, we verified that the loader was actually out of date by
+ checking out the release history. When we found a newer version that supported
+ Webpack v4, we would upgrade. For posterity, below is a complete list of the
+ loaders that we touched as a part of the upgrade:
+
+ ```
+ // These had to be upgraded for Webpack to compile
+ fast-sass-loader@v1.4.0 -> v1.4.5
+ ts-loader@v3.2.0 -> v4.3.0
+ file-loader@v0.11.1 -> v1.1.11
+
+ // Temporarily disabled as it does not yet support v4
+ tslint-loader
+
+ // This was removed because we didn't need it
+ json-loader // Built into Webpack
+ rails-erb-loader // We don't use it anymore
+ style-loader // We don't use it anymore
+
+ // Why?
+ css-loader@v0.28.4 -> v0.28.11
+ postcss-loader@v2.0.6 -> v2.1.5
+ istanbul-instrument-loader@v3.0.0 -> v3.0.1
+ ```
+
+ There is one special case that needs to be mentioned: `tslint-loader`. This
+ loader has also been broken by Webpack v4, and it appears that the authors have
+ acknowledged this. They have a fix merged into their master branch but have not
+ yet attached a version to this change:
+ https://github.com/wbuchwalter/tslint-loader/pull/95
+ As a result, we have currently disabled `tslint-loader`.
+
+ After this, Webpack was able to compile! Jubilated, we decided to fire up our
+ Rails server and see if our bundles actually ran properly. Incredibly, we found
+ our app working as it should!
+
+ What about `webpack-dev-server`? Our development configuration has also
+ specified options for `webpack-dev-server` and we have upgraded it as well. So
+ it's worth checking that it isn't broken. To our surprise and great relief,
+ when we fired up `webpack-dev-server` and got it hooked up with our Rails
+ application, it worked flawlessly without any changes to our configuration.
+ Furthermore, we also noticed that recompilation on v4 was significantly faster
+ than in v3, so that was a really nice little cherry on top.
+
+
+
+
+
+ This time, the error itself is not as important as where the error came from.
+ Looking at the stack trace, we were able to see that the error originated from
+ `fork-ts-checker-webpack-plugin`.
+
+ What is happening here is that the `fork-ts-checker-webpack-plugin` is on an
+ older version and is trying to use a Webpack function that has been removed in
+ v4. Looking up the `fork-ts-checker-webpack-plugin` on GitHub and checking out
+ its release history, we were able to find that `v0.4.0` is the first version
+ for which Webpack v4 is supported. We thus upgrade this package:
+ ```
+ yarn upgrade fork-ts-checker-webpack-plugin@v0.4.1
+ ```
+
+ ### Upgrading Loaders
+
+ Back to the top of the cycle, we ran Webpack compile again. Error again:
+
+
+ This time, it looks like we were able to get past the plugins initialization
+ stage of Webpack. The error output was generated after Webpack started reading
+ files and resolving dependencies. Our particular error came from
+ `fast-sass-loader`.
+
+ Similar to what we did for `fork-ts-checker-plugin`, we searched online and was
+ able to find that `fast-sass-loader` only started supporting Webpack v4 in
+ `v1.4.1`. So we did an upgrade:
+ ```
+ yarn upgrade fast-sass-loader@v1.4.5
+ ```
+
+ Going back to the top of the cycle, we quickly discovered that we had to do the
+ same for a bunch of other loaders as well. In all cases, similar errors
+ and, looking online, we verified that the loader was actually out of date by
+ checking out the release history. When we found a newer version that supported
+ Webpack v4, we would upgrade. For posterity, below is a complete list of the
+ loaders that we touched as a part of the upgrade:
+
+ ```
+ // These had to be upgraded for Webpack to compile
+ fast-sass-loader@v1.4.0 -> v1.4.5
+ ts-loader@v3.2.0 -> v4.3.0
+ file-loader@v0.11.1 -> v1.1.11
+
+ // Temporarily disabled as it does not yet support v4
+ tslint-loader
+
+ // This was removed because we didn't need it
+ json-loader // Built into Webpack
+ rails-erb-loader // We don't use it anymore
+ style-loader // We don't use it anymore
+
+ // Why?
+ css-loader@v0.28.4 -> v0.28.11
+ postcss-loader@v2.0.6 -> v2.1.5
+ istanbul-instrument-loader@v3.0.0 -> v3.0.1
+ ```
+
+ There is one special case that needs to be mentioned: `tslint-loader`. This
+ loader has also been broken by Webpack v4, and it appears that the authors have
+ acknowledged this. They have a fix merged into their master branch but have not
+ yet attached a version to this change:
+ https://github.com/wbuchwalter/tslint-loader/pull/95
+ As a result, we have currently disabled `tslint-loader`.
+
+ After this, Webpack was able to compile! Jubilated, we decided to fire up our
+ Rails server and see if our bundles actually ran properly. Incredibly, we found
+ our app working as it should!
+
+ What about `webpack-dev-server`? Our development configuration has also
+ specified options for `webpack-dev-server` and we have upgraded it as well. So
+ it's worth checking that it isn't broken. To our surprise and great relief,
+ when we fired up `webpack-dev-server` and got it hooked up with our Rails
+ application, it worked flawlessly without any changes to our configuration.
+ Furthermore, we also noticed that recompilation on v4 was significantly faster
+ than in v3, so that was a really nice little cherry on top.

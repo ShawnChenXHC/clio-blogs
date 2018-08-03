@@ -2,11 +2,11 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Rails application that relied on the Rails templating engine. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
+Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Rails application that relied on a backend templating engine. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
 
-Our Production Engineering team have set up an automated system for building newer versions of Apollo. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: Whenever a developer checks code into our repository, a new build will be created and ran automatically, compiling together the source code and running tests as per dictated by our set up.
+Our Production Engineering team have set up an automated system for building newer versions of Apollo. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: Whenever a developer checks code into our repository, a new build will be created and ran automatically, compiling together the source code and running tests as per dictated by our set-up.
 
-This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for compilation, and press a single button to ship it. However, as the size of Apollo grew, so too did the amount of time it took for it to be built on CI. Soon enough, we reached our tipping point.
+This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it. However, as the size of Apollo grew, so too did the amount of time it took for it to be built on CI. Soon enough, we reached our tipping point.
 
 Before going any further, I would like to quickly mention who exactly we are. We are the Front End Infrastructure (FEI) team. Our mission is to create an amazing front-end development environment here at Clio. As a part of this mission, we are responsible for overseeing the usage and maintenance of various front-end technologies.
 
@@ -18,7 +18,7 @@ Looking at BuildKite, we were greeted by a horrendous sight. Not only were most 
 
 After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our application has grown to a size where Webpack could no longer compile it within the memory limits placed upon it.
 
-So how can we resolve this issue? If money was no object, we could have upgraded to instances with more RAM. However, we felt that our application's current size did not justify such an expense and the issue was most likely the result of poor optimization. As such, we got down to the business of optimizing our build.
+So how can we resolve this issue? If money was no object, we could have upgraded to instances with more RAM. However, we felt that our application's current complexity did not justify such an expense and the issue was most likely the result of poor optimization. As such, we got down to the business of optimizing our build.
 
 ## Webpack v4
 
@@ -64,6 +64,36 @@ So, as familiar as this advice is to many, it is nevertheless worth repeating he
 2. Google the errors that you get.
 3. Upgrade/Reconfigure as necessary to resolve this one error.
 4. Repeat 1 ~ 3 until Webpack compiles and everything works properly.
+
+### Upgrading Plugins/Loaders
+
+It is likely that a number of your plugins and loaders are broken as a result of the upgrade to Webpack v4. Webpack v4 has made a number of breaking changes to its API, and if any of your plugins/loaders are relying on an older interface that has been changed, they will cause errors during the Webpack compilation process.
+
+A typical plugin error looks like this:
+
+```
+/home/vagrant/clio/themis/node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
+    _this.compiler.applyPluginsAsync('fork-ts-checker-service-before-start', function () {
+                           ^
+
+TypeError: _this.compiler.applyPluginsAsync is not a function
+```
+
+And a typical loader error looks like this:
+
+```
+ERROR in ./client-src/themisui-vendor.scss
+Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot read property 'context' of undefined
+    at getLoaderConfig (/home/vagrant/clio/themis/node_modules/fast-sass-loader/lib/index.js:72:29)
+```
+
+Webpack has really good stack traces when these types of errors occur, and they will usually tell you which loader/plugin the error is coming from. In the examples above, you can see that the culprits were `fork-ts-checker-webpack-plugin` and `fast-sass-loader` respectively.
+
+Luckily, Webpack has given the community plenty of notice before pushing out the breaking changes in v4, so most loaders/plugins have had a chance to upgrade themselves to be compliant with the new standards.
+
+Our strategy was to search for the loader/plugin on Github, look at their release history, and try to find a release that explicitly states support for Webpack v4. If such a release existed, we would upgrade our package to the latest version.
+
+If you don't see any mentions of Webpack in the release history, check the Github issues for the package. There are still several loaders/plugins that have not yet upgraded themselves to be compatible with Webpack v4, and these will usually have one or more Github issues related to this incompatibility.
 
 ### CommonsChunkPlugin
 
@@ -174,107 +204,16 @@ In our production Webpack set-up, we found that we were still using the old `plu
 
 It is also worth noting that, thanks to Webpack's `mode` defaults, you don't have to specify `optimization.minimizer` in order to get uglification. By default, if your `mode` is set to `"production"`, Webpack will perform uglification on the output. Hence, by simply removing the `UglifyJsPlugin` from our `plugins` array and making sure our `mode` is set properly, we were able to get past this error and still have optimized output.
 
-### Upgrading Other Plugins
+## Conclusion
 
-Back to the top of the cycle, we ran Webpack compile again. Error again:
-
-```
-/home/vagrant/clio/themis/node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
-    _this.compiler.applyPluginsAsync('fork-ts-checker-service-before-start', function () {
-                           ^
-
-TypeError: _this.compiler.applyPluginsAsync is not a function
-```
-
-This time, the error itself is not as important as where the error came from.
-Looking at the stack trace, we were able to see that the error originated from
-`fork-ts-checker-webpack-plugin`.
-
-What is happening here is that the `fork-ts-checker-webpack-plugin` is on an
-older version and is trying to use a Webpack function that has been removed in
-v4. Looking up the `fork-ts-checker-webpack-plugin` on GitHub and checking out
-its release history, we were able to find that `v0.4.0` is the first version
-for which Webpack v4 is supported. We thus upgrade this package:
-```
-yarn upgrade fork-ts-checker-webpack-plugin@v0.4.1
-```
-
-### Upgrading Loaders
-
-Back to the top of the cycle, we ran Webpack compile again. Error again:
-
-```
-ERROR in ./client-src/themisui-vendor.scss
-Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot read property 'context' of undefined
-    at getLoaderConfig (/home/vagrant/clio/themis/node_modules/fast-sass-loader/lib/index.js:72:29)
-```
-
-This time, it looks like we were able to get past the plugins initialization
-stage of Webpack. The error output was generated after Webpack started reading
-files and resolving dependencies. Our particular error came from
-`fast-sass-loader`.
-
-Similar to what we did for `fork-ts-checker-plugin`, we searched online and was
-able to find that `fast-sass-loader` only started supporting Webpack v4 in
-`v1.4.1`. So we did an upgrade:
-```
-yarn upgrade fast-sass-loader@v1.4.5
-```
-
-Going back to the top of the cycle, we quickly discovered that we had to do the
-same for a bunch of other loaders as well. In all cases, similar errors
-and, looking online, we verified that the loader was actually out of date by
-checking out the release history. When we found a newer version that supported
-Webpack v4, we would upgrade. For posterity, below is a complete list of the
-loaders that we touched as a part of the upgrade:
-
-```
-// These had to be upgraded for Webpack to compile
-fast-sass-loader@v1.4.0 -> v1.4.5
-ts-loader@v3.2.0 -> v4.3.0
-file-loader@v0.11.1 -> v1.1.11
-
-// Temporarily disabled as it does not yet support v4
-tslint-loader
-
-// This was removed because we didn't need it
-json-loader // Built into Webpack
-rails-erb-loader // We don't use it anymore
-style-loader // We don't use it anymore
-
-// Why?
-css-loader@v0.28.4 -> v0.28.11
-postcss-loader@v2.0.6 -> v2.1.5
-istanbul-instrument-loader@v3.0.0 -> v3.0.1
-```
-
-There is one special case that needs to be mentioned: `tslint-loader`. This
-loader has also been broken by Webpack v4, and it appears that the authors have
-acknowledged this. They have a fix merged into their master branch but have not
-yet attached a version to this change:
-https://github.com/wbuchwalter/tslint-loader/pull/95
-As a result, we have currently disabled `tslint-loader`.
-
-After this, Webpack was able to compile! Jubilated, we decided to fire up our
-Rails server and see if our bundles actually ran properly. Incredibly, we found
-our app working as it should!
-
-What about `webpack-dev-server`? Our development configuration has also
-specified options for `webpack-dev-server` and we have upgraded it as well. So
-it's worth checking that it isn't broken. To our surprise and great relief,
-when we fired up `webpack-dev-server` and got it hooked up with our Rails
-application, it worked flawlessly without any changes to our configuration.
-Furthermore, we also noticed that recompilation on v4 was significantly faster
-than in v3, so that was a really nice little cherry on top.
+So after upgrading a bunch of loaders and plugins, and reconfiguring a small number of options, we finally managed to get Webpack to compile and our application running again.
 
 **INSERT CELEBRATION GIF**
 
-## Tidying Up
+Estatic, we were eager to start benchmarking our compilation process and comparing it against our previous set-up with Webpack v3. And this is when joy into slight disappointment.
 
-Lastly, we made some further adjustments to make our Webpack process better for everyone. Essentially, we are taking advantage of the benefits that Webpack provides.
+Don't get us wrong, we did actually see **significant** performance improvements just as the Webpack team has promised. Our tests showed that Apollo was compiling around 60 ~ 80 seconds faster in v4 than in v3, which is an incredible gain. We also saw noticeable improvements in recompilation times under `--watch` mode, leading to shorter code-compile-debug cycles.
 
-### Set Your Mode
+However, we did not see a significant improvement in Webpack's memory usage. After performing some basic tests, we found that it was still running over the memory limit we have on our CI agents. This meant it was back to the drawing board for us.
 
-First piece of advice: Make sure that you are setting the `mode` explicitly in all of your Webpack configurations. The new `mode` property is one of the main features of Webpack v4: It enables zero-configuration Webpack projects. If left unspecified, Webpack will default `mode` to `"production"`. This will cause Webpack to use a set of "sensible defaults" when compiling your application.
-
-When we upgraded to v4, we forgot to set the `mode` to `"development"` in our development and test environments. This led to ridiculously long recompilation times as Webpack was performing all sorts of unnecessary output optimization every time we changed the source code.
+Tune in to the next installment to see how we dealt with this memory issue.
