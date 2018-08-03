@@ -30,7 +30,7 @@ The second reason is a little bit more plain. The FEI team already had the upgra
 
 Apollo was built with a blend of many different front-end technologies. CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complimented by healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: We have at least 3 different build environments and utilize more than 20 loaders and 9 plugins.
 
-With such a "mature" Webpack v3 setup, the upgrade to Webpack v4 was not straightforward. The rest of this article will provide a description of the strategy we used to upgrade to the latest version, with an emphasis on the issues we encountered and how we went about resolving them.
+With such a "mature" Webpack v3 set-up, the upgrade to Webpack v4 was not straightforward. The rest of this article will provide a description of the strategy we used to upgrade to the latest version, with an emphasis on the issues we encountered and how we went about resolving them.
 
 ## The Upgrade
 
@@ -52,9 +52,9 @@ yarn add -D webpack-cli@v2.1.4
 
 After the upgrade, our application was completely broken. This is where the actual work began. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with the new specifications of Webpack v4. In no particular order, the following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
 
-### 1. One Step At a Time
+### One Step At a Time
 
-First piece of advice: Do the upgrade one step at a time. Initially, our upgrade plan was to perform a systematic review of our entire Webpack setup and preemptively resolve as many issues as we possible could. This involved, among other things, a complete review of all of our loaders and plugins to see if they were compatible with the new version of Webpack, if they needed an upgrade, or if they were deprecated since v4's release.
+First piece of advice: Do the upgrade one step at a time. Initially, our upgrade plan was to perform a systematic review of our entire Webpack set-up and preemptively resolve as many issues as we possible could. This involved, among other things, a complete review of all of our loaders and plugins to see if they were compatible with the new version of Webpack, if they needed an upgrade, or if they were deprecated since v4's release.
 
 We chose this strategy initially because we liked the idea of "doing everything right the first time." In practice, however, this actually led to us "doing nothing right the first time." The issue that we ran into is that, once we finished doing all the things we thought were necessary, and Webpack failed to compile our application, we were at a loss for what went wrong. The change set was simply too large, and we couldn't diagnose the issue.
 
@@ -114,7 +114,7 @@ So by removing all instances of the `CommonsChunkPlugin` from the `plugins` arra
 
 ### ExtractTextWebpackPlugin
 
-Back to the top of the cycle, we ran Webpack compile again. Error again:
+Another error that we ran into looked like this:
 
 ```
 Error: Chunk.entrypoints: Use Chunks.groupsIterable and filter by instanceof Entrypoint instead
@@ -122,49 +122,57 @@ Error: Chunk.entrypoints: Use Chunks.groupsIterable and filter by instanceof Ent
     at /home/vagrant/clio/themis/node_modules/extract-text-webpack-plugin/dist/index.js:176:48
 ```
 
-Once again, the error itself is not as important as the source of the error. In
-this case, the culprit is `extract-text-webpack-plugin`. This is another one of
-those "documented breakages." In prior versions of Webpack, the
-`extract-text-webpack-plugin` was commonly used to lift CSS out of compiled JS
-bundles and into dedicated CSS asset files. We, too, used it for this purpose.
-Since Webpack v4, however, it has been superseded by `mini-css-extract-plugin`.
+This time, the error itself is not as important as its source. In this case, the culprit is `extract-text-webpack-plugin`. This is another one of those "documented breakages." In prior versions of Webpack, the `extract-text-webpack-plugin` was commonly used to lift CSS out of compiled JS bundles and into dedicated CSS asset files. We, too, used it for this purpose. The Webpack team now recommends using `mini-css-extract-plugin` for this role, but `extract-text-webpack-plugin` is still around as it has other use cases as well.
 
-**? Should you talk about mini-css-extract-plugin ?**
+To deal with this error, you actually have two options. In the long-term, you probably want to use `mini-css-extract-plugin`. But, if you want to "park" that and do it in a later fix, you can actually upgrade `extract-text-webpack-plugin` to one of its beta releases. This is what we did:
 
-Here, you actually have two options. In the long-term, you probably want to use
-`mini-css-extract-plugin`. But, if you want to "park" that and do that in a
-later fix, you can actually upgrade `extract-text-webpack-plugin` to one of its
-beta releases. This is what we did:
 ```
 yarn upgrade extract-text-webpack-plugin@v4.0.0-beta.0
 ```
 
+Without changing any other plugins/configurations, this was sufficient for resolving this issue.
+
 ### UglifyJSPlugin
 
-Back to the top of the cycle, we ran Webpack compile again. Error again:
+The last "special issue" we ran into whilst upgrading is this one:
 
 ```
 FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory
 ```
 
-This seems to have occurred as UglifyJS was running.
+Out of context, this error could mean literally anything, hence it was a bit harder for us to pin this one down. The hint to the solution was in the timing: We noticed that this error always arose as UglifyJS was running.
 
-So, in previous versions of Webpack, you would use and configure
-`UglifyJSPlugin` by including it into the `plugins` array of the configuration
-object. We did just the same:
+In previous versions of Webpack, you would use the `UglifyJSPlugin` by including it in the `plugins` array of your configuration object:
 
 ```js
 plugins: [
   new webpack.optimize.UglifyJsPlugin({
-    // ... configuration
+    // ... This object configures the behaviour of the plugin
   }),
 ]
 ```
 
-In Webpack v4, however, the configuration of `UglifyJSPlugin` is accomplished
-through `optimize.minimizer`. In addition, `UglifyJSPlugin` is included and ran
-on default options when the `mode` is `"production"`. Therefore, we deleted it
-from our `plugins` array. Once this was done, lo and behold, the error was gone.
+In Webpack v4, this syntax is no longer supported. In its place, the `optimization.minimizer` property now takes on the role of telling Webpack how it should optimize the size of output bundles:
+
+```js
+// Remember to require the plugin
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+
+module.exports = {
+  // ... Other configuration properties
+  optimization: {
+    minimizer: [ // This array tells Webpack which minimizers it should use
+      new UglifyJsPlugin({
+        // ... Specify options of UglifyJS here
+      })
+    ]
+  },
+}
+```
+
+In our production Webpack set-up, we found that we were still using the old `plugins` array syntax. Knowing this was definitely wrong, we removed it and tried our compilation again, just to see what happens. To our surprise, this resolved the issue!
+
+It is also worth noting that, thanks to Webpack's `mode` defaults, you don't have to specify `optimization.minimizer` in order to get uglification. By default, if your `mode` is set to `"production"`, Webpack will perform uglification on the output. Hence, by simply removing the `UglifyJsPlugin` from our `plugins` array and making sure our `mode` is set properly, we were able to get past this error and still have optimized output.
 
 ### Upgrading Other Plugins
 
