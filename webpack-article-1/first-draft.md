@@ -1,25 +1,5 @@
 # First Draft
 
-This is the first draft for the article that describes the steps that we took
-in response the Webpack issues that we faced.
-
-This article is intended to be the first of a two-part series that covers, as
-comprehensively as possible, the issues the front-end team here at Clio
-experienced with our Webpack compilation process.
-
-In this first part, we will explain:
-
-1. What the issue we faced was
-2. Our initial, somewhat naive attempt: Upgrading Webpack
-   * Explain our upgrade path, what challenges we faced, what resources helped,
-     and how we ensured that things were working
-   * Explain the benefits we got from the Webpack upgrade
-   * Explain how even with the benefits, it still in
-3. Explain the benefits that we got from the Webpack upgrade
-4. Explain how we were disappointed when the upgrade didn't yield as much as
-   what we had hoped for.
-5. Explain how we had to dig deeper, this would be second article.
-
 ## Introduction
 
 Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Rails application that relied on the Rails templating engine. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
@@ -34,17 +14,9 @@ Before going any further, I would like to quickly mention who exactly we are. We
 
 In the beginning of May, the FEI team started receiving a stream of alerts on our Slack channel. People were being frustrated by the sheer amount of time it took to compile Apollo, a number of people even reported compilation failures.
 
-Looking at BuildKite, we were greeted by a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, there were also a number of builds that failed after running for similar lengths of time.
+Looking at BuildKite, we were greeted by a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, there were also a number of builds that failed after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively to emergency situations. For the FEI team, it was all-hands-on-deck.
 
-Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively to emergency situations. For the FEI team, it was all-hands-on-deck.
-
-After some initial investigation, we hypothesized that the root cause of the issue was memory-related. In rough terms, this is what we hypothesized:
-
-1. The AWS EC2 instance allocated for a build has 4GB of physical memory.
-2. In the past, it was possible to run and complete all of the processes inside our compilation pipeline within this memory limit.
-3. As the size of Apollo grew, so too did the amount of memory needed by Webpack in order to compile it.
-4. As the memory on the instance was exhausted, the running processes began to experience performance issues: This is the cause of Webpack's slowness.
-5. Eventually, there was simply not enough resources for Webpack to complete execution, leading to build failures.
+After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our application has grown to a size where Webpack could no longer compile it within the memory limits placed upon it.
 
 So how can we resolve this issue? If money was no object, we could have upgraded to instances with more RAM. However, we felt that our application's current size did not justify such an expense and the issue was most likely the result of poor optimization. As such, we got down to the business of optimizing our build.
 
@@ -52,7 +24,7 @@ So how can we resolve this issue? If money was no object, we could have upgraded
 
 We decided that the first step in the optimization of our Apollo's compilation was the upgrade of Webpack to v4. There were two reasons for this decision.
 
-When Webpack v4 was released, its headline was [performance](https://medium.com/webpack/webpack-4-released-today-6cdb994702d4). As other folks upgraded their applications to the latest versions of Webpack, many started reporting significant performance improvements. We hoped, if we were lucky, that the upgrade could be the silver that we needed to get ourselves back in the green. A little hopeful, yes, but why would we not want to take advantage of the hardwork the Webpack team has put into optimization?
+When Webpack v4 was released, its headline was [performance](https://medium.com/webpack/webpack-4-released-today-6cdb994702d4). As other folks upgraded their applications to the latest versions of Webpack, many started reporting significant performance improvements. We hoped, if we were lucky, that the upgrade could be the silver bullet we needed to get ourselves back in the green. A little hopeful, yes, but why shouldn't we take advantage of the latest and greatest?
 
 The second reason is a little bit more plain. The FEI team already had the upgrade to Webpack v4 in its pipeline. Being a major version bump, it is possible that any optmizations we find/implement whilst on Webpack v3 will be moot once we upgraded. Therefore, we felt it better to upgrade now, see what it gives us, and improve things from there.
 
@@ -95,21 +67,16 @@ So, as familiar as this advice is to many, it is nevertheless worth repeating he
 
 ### CommonsChunkPlugin
 
-After this upgrade was complete, we decided to test the waters of our progress
-by running a test compilation. This gave us the following error:
+One of the errors we got during our upgrade was this:
 
 ```
 Error: webpack.optimize.CommonsChunkPlugin has been removed, please use config.optimization.splitChunks instead.
 ```
 
-Like many other Webpack projects, we used the `CommonsChunkPlugin` in order to
-generate separated chunks for third-party modules and the manifest file.
-Because these files change less often than our application code, separating
-them out gives our clients the ability to long-cache them, reducing the
-initial load time of our app.
+Like many other Webpack projects, we used the `CommonsChunkPlugin` to generated separate chunks for our third-party modules and the Webpack manifest file. These files tend to change less often than our bundled application file, so by separating them out, our clients' browsers can cache them separately and experience less-costly cache busts.
 
-In Webpack v4, the `CommonsChunkPlugin` is deprecated. This is what we had in
-our config:
+To accomplish this, we had the following set-up in our Webpack configuration file:
+
 ```js
 plugins: [
   new webpack.optimize.CommonsChunkPlugin({
@@ -124,8 +91,7 @@ plugins: [
 ],
 ```
 
-Looking at the documentation for `config.optimization.splitChunks`, we removed
-those items in our plugins array and added the following configuration:
+In Webpack v4, the `CommonsChunkPlugin` was deprecated. Instead, Webpack has introduced a new configuration property, `optimization`, that handles various output optimization settings. Luckily, our usage of the `CommonsChunkPlugin` was fairly standard, and we were able to find a direct translation of our old configuration:
 
 ```js
 optimization: {
@@ -143,6 +109,8 @@ optimization: {
   }
 }
 ```
+
+So by removing all instances of the `CommonsChunkPlugin` from the `plugins` array and adding the above to our configuration object, we were able to resolve this error and achieve the same outcomes as before.
 
 ### ExtractTextWebpackPlugin
 
@@ -293,7 +261,7 @@ than in v3, so that was a really nice little cherry on top.
 
 **INSERT CELEBRATION GIF**
 
-### Tidying Up
+## Tidying Up
 
 Lastly, we made some further adjustments to make our Webpack process better for everyone. Essentially, we are taking advantage of the benefits that Webpack provides.
 

@@ -1,3 +1,26 @@
+This is the first draft for the article that describes the steps that we took
+in response the Webpack issues that we faced.
+
+This article is intended to be the first of a two-part series that covers, as
+comprehensively as possible, the issues the front-end team here at Clio
+experienced with our Webpack compilation process.
+
+In this first part, we will explain:
+
+1. What the issue we faced was
+2. Our initial, somewhat naive attempt: Upgrading Webpack
+   * Explain our upgrade path, what challenges we faced, what resources helped,
+     and how we ensured that things were working
+   * Explain the benefits we got from the Webpack upgrade
+   * Explain how even with the benefits, it still in
+3. Explain the benefits that we got from the Webpack upgrade
+4. Explain how we were disappointed when the upgrade didn't yield as much as
+   what we had hoped for.
+5. Explain how we had to dig deeper, this would be second article.
+
+
+
+
 Our Production Engineering Team (PEng) has set up an automated system for
 building newer versions of Clio. We use BuildKite as our continuous integration
 (CI) platform. This process can roughly be described as follows:
@@ -19,6 +42,13 @@ building newer versions of Clio. We use BuildKite as our continuous integration
 6. When the compilation is finished, the assets are compressed and uploaded;
    thus completing the build process.
 
+
+
+ 1. The AWS EC2 instance allocated for a build has 4GB of physical memory.
+ 2. In the past, it was possible to run and complete all of the processes inside our compilation pipeline within this memory limit.
+ 3. As the size of Apollo grew, so too did the amount of memory needed by Webpack in order to compile it.
+ 4. As the memory on the instance was exhausted, the running processes began to experience performance issues: This is the cause of Webpack's slowness.
+ 5. Eventually, there was simply not enough resources for Webpack to complete execution, leading to build failures.
 
  ## Here come the tests
 
