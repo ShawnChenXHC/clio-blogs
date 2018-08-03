@@ -78,31 +78,20 @@ yarn add -D webpack-cli@v2.1.4
 
 ## Compile God Damn It
 
-After the upgrade, our application was completely broken. This is where the actual work begins. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with the new specifications of Webpack v4. In no particular order, the following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
+After the upgrade, our application was completely broken. This is where the actual work began. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with the new specifications of Webpack v4. In no particular order, the following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
 
-### Set Your Mode
+### 1. One Step At a Time
 
-### One Step At a Time
+First piece of advice: Do the upgrade one step at a time. Initially, our upgrade plan was to perform a systematic review of our entire Webpack setup and preemptively resolve as many issues as we possible could. This involved, among other things, a complete review of all of our loaders and plugins to see if they were compatible with the new version of Webpack, if they needed an upgrade, or if they were deprecated since v4's release.
 
-Initially, our upgrade plan was to systematically go through every single
-loader and plugin that we used and upgrade each and every one of them
-regardless of whether or not they had been broken (We didn't bother checking.)
-We also sought to perform a complete review of our Webpack configurations and
-check them against Webpack v4's new specifications.
+We chose this strategy initially because we liked the idea of "doing everything right the first time." In practice, however, this actually led to us "doing nothing right the first time." The issue that we ran into is that, once we finished doing all the things we thought were necessary, and Webpack failed to compile our application, we were at a loss for what went wrong. The change set was simply too large, and we couldn't diagnose the issue.
 
-This turned out to be a really bad idea. After eagerly upgrading a bunch of
-loaders and plugins, we ran into an issue and Webpack wouldn't compile. Since
-we upgraded everything at once, it was really hard for us to find the root
-cause. Thus, we recommend an "upgrade-if-necessary" strategy, with periodic
-tests along the way.
+So, as familiar as this advice is to many, it is nevertheless worth repeating here in the context of Webpack: Make each step in your upgrade as small as possible. Webpack actually lends itself nicely to this process, and we found the error outputs we got usually gave us a good idea of what the next step should be. In particular, we recommend the following iterative process for upgrading:
 
-Our "test-Google-debug" can be described as:
-1. Run the Webpack compilation.
-   * We run this in production mode to capture as many loaders/plugins issues
-     as possible
-2. Google the errors that we got
-3. Upgrade/Reconfigure as necessary
-4. Go back to step 1
+1. Run your Webpack compilation.
+2. Google the errors that you get.
+3. Upgrade/Reconfigure as necessary to resolve this one error.
+4. Repeat 1 ~ 3 until Webpack compiles and everything works properly.
 
 ### CommonsChunkPlugin
 
@@ -304,70 +293,12 @@ than in v3, so that was a really nice little cherry on top.
 
 **INSERT CELEBRATION GIF**
 
-## Here come the tests
-
-Karma is the chosen test runner for New Clio. We use `karma-webpack` to
-better integrate our test suite with the rest of our application. When we wish
-to run our tests, Karma uses Webpack as a preprocessor. All of our tests, along
-with all of our application code, are processed and bundled into one JS file.
-Once this is done, the tests begin running automatically.
-
-This integration has given us a lot of benefits: Our test code is written just
-like our source code since it gets passed through the same set of loaders, and
-our test environment closely mirrors production since the Webpack configuration
-for both shares the same base configs.
-
-When we upgraded Webpack to v4, we also had to make sure that this integration
-was still operational. So we ran Karma and got this error:
-
-```js
-ERROR [config]: Invalid config file!
-  Error: webpack.optimize.CommonsChunkPlugin has been removed, please use config.optimization.splitChunks instead.
-```
-
-What happened? Well, like I've mentioned, our shared Webpack configuration file
-used to include the `CommonsChunkPlugin`. However, `karma-webpack` has a known
-[compatibility issue](https://github.com/webpack-contrib/karma-webpack/issues/22)
-with this plugin, so when we generated the test configuration from the shared
-file, we had this iterator in place to strip out `CommonsChunkPlugin`:
-
-```js
-testConfig.plugins = sharedConfig.plugins
-  .filter((item) => {
-    return !(item instanceof webpack.optimize.CommonsChunkPlugin);
-  });
-```
-
-Unfortunately, with the upgrade to Webpack v4, the mere mentioning of the
-`CommonsChunkPlugin` is now grounds for error. Therefore, once we removed this
-`filter()`, the error was gone.
-
-Next, do not forget to make sure that your test configuration settings are
-actually being consumed by Karma. We ran into an issue with this because our
-`karma.conf.js` looked like this:
-
-```js
-const webpackConfig = require("config/webpack/test.js");
-module.exports = (config) => {
-  config.set({
-    // ... other configurations
-    webpack: {
-      module: webpackConfig.module,
-      output: webpackConfig.output,
-      resolve: webpackConfig.resolve,
-      plugins: webpackConfig.plugins,
-    },
-  });
-}
-```
-
-When Karma actually calls upon Webpack, the options it uses will be only those
-specified within the Karma options file. This meant things that weren't defined
-explicitly will revert to Webpack's defaults, for example, `mode` will be set
-to the default of `"production"`.
-
 ### Tidying Up
 
-Lastly, we made some further adjustments to make our Webpack process better for
-everyone. Essentially, we are taking advantage of the benefits that Webpack
-provides.
+Lastly, we made some further adjustments to make our Webpack process better for everyone. Essentially, we are taking advantage of the benefits that Webpack provides.
+
+### Set Your Mode
+
+First piece of advice: Make sure that you are setting the `mode` explicitly in all of your Webpack configurations. The new `mode` property is one of the main features of Webpack v4: It enables zero-configuration Webpack projects. If left unspecified, Webpack will default `mode` to `"production"`. This will cause Webpack to use a set of "sensible defaults" when compiling your application.
+
+When we upgraded to v4, we forgot to set the `mode` to `"development"` in our development and test environments. This led to ridiculously long recompilation times as Webpack was performing all sorts of unnecessary output optimization every time we changed the source code.
