@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Rails application that relied on a backend templating engine. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
+Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
 
 Our Production Engineering team have set up an automated system for building newer versions of Apollo. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: Whenever a developer checks code into our repository, a new build will be created and ran automatically, compiling together the source code and running tests as per dictated by our set-up.
 
@@ -26,7 +26,7 @@ We decided that the first step in the optimization of our Apollo's compilation w
 
 When Webpack v4 was released, its headline was [performance](https://medium.com/webpack/webpack-4-released-today-6cdb994702d4). As other folks upgraded their applications to the latest versions of Webpack, many started reporting significant performance improvements. We hoped, if we were lucky, that the upgrade could be the silver bullet we needed to get ourselves back in the green. A little hopeful, yes, but why shouldn't we take advantage of the latest and greatest?
 
-The second reason is a little bit more plain. The FEI team already had the upgrade to Webpack v4 in its pipeline. Being a major version bump, it is possible that any optmizations we find/implement whilst on Webpack v3 will be moot once we upgraded. Therefore, we felt it better to upgrade now, see what it gives us, and improve things from there.
+The second reason is a little bit more thoughtful. The FEI team already had the upgrade to Webpack v4 in its pipeline. Being a major version bump, it is possible that any optimizations we find/implement whilst on Webpack v3 will be moot once we upgraded. Therefore, we felt it better to upgrade now, see what it gives us, and improve things from there.
 
 Apollo was built with a blend of many different front-end technologies. CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complimented by healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: We have at least 3 different build environments and utilize more than 20 loaders and 9 plugins.
 
@@ -48,15 +48,15 @@ yarn upgrade webpack-dev-server@v3.1.4
 yarn add -D webpack-cli@v2.1.4
 ```
 
-## Compile God Damn It
+## Are We Compiling Yet?
 
-After the upgrade, our application was completely broken. This is where the actual work began. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with the new specifications of Webpack v4. In no particular order, the following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
+After the upgrade, our application was completely broken. This is where the actual work began. For the most part, the errors that we got were the result of outdated Webpack loaders/plugins, but we also found it necessary to adjust some configurations to meet with newer specifications. The following is a list of recommendations and interesting pieces of knowledge that we think will be useful for anyone attempting to upgrade their own Webpack project.
 
 ### One Step At a Time
 
 First piece of advice: Do the upgrade one step at a time. Initially, our upgrade plan was to perform a systematic review of our entire Webpack set-up and preemptively resolve as many issues as we possible could. This involved, among other things, a complete review of all of our loaders and plugins to see if they were compatible with the new version of Webpack, if they needed an upgrade, or if they were deprecated since v4's release.
 
-We chose this strategy initially because we liked the idea of "doing everything right the first time." In practice, however, this actually led to us "doing nothing right the first time." The issue that we ran into is that, once we finished doing all the things we thought were necessary, and Webpack failed to compile our application, we were at a loss for what went wrong. The change set was simply too large, and we couldn't diagnose the issue.
+We chose this strategy initially because we liked the idea of "doing everything right the first time." In practice, however, this actually led to us "doing nothing right the first time." The issue that we ran into is that, once we finished doing all the things we thought were necessary, and our application failed to compile, we were at a loss for what went wrong. The change set was simply too large, and we couldn't diagnose the issue.
 
 So, as familiar as this advice is to many, it is nevertheless worth repeating here in the context of Webpack: Make each step in your upgrade as small as possible. Webpack actually lends itself nicely to this process, and we found the error outputs we got usually gave us a good idea of what the next step should be. In particular, we recommend the following iterative process for upgrading:
 
@@ -72,7 +72,7 @@ It is likely that a number of your plugins and loaders are broken as a result of
 A typical plugin error looks like this:
 
 ```
-/home/vagrant/clio/themis/node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
+node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
     _this.compiler.applyPluginsAsync('fork-ts-checker-service-before-start', function () {
                            ^
 
@@ -84,16 +84,16 @@ And a typical loader error looks like this:
 ```
 ERROR in ./client-src/themisui-vendor.scss
 Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot read property 'context' of undefined
-    at getLoaderConfig (/home/vagrant/clio/themis/node_modules/fast-sass-loader/lib/index.js:72:29)
+    at getLoaderConfig (node_modules/fast-sass-loader/lib/index.js:72:29)
 ```
 
 Webpack has really good stack traces when these types of errors occur, and they will usually tell you which loader/plugin the error is coming from. In the examples above, you can see that the culprits were `fork-ts-checker-webpack-plugin` and `fast-sass-loader` respectively.
 
-Luckily, Webpack has given the community plenty of notice before pushing out the breaking changes in v4, so most loaders/plugins have had a chance to upgrade themselves to be compliant with the new standards.
+Luckily, Webpack gave the community plenty of notice before pushing out the breaking changes in v4, so most loaders/plugins have released updates that are compliant with v4.
 
 Our strategy was to search for the loader/plugin on Github, look at their release history, and try to find a release that explicitly states support for Webpack v4. If such a release existed, we would upgrade our package to the latest version.
 
-If you don't see any mentions of Webpack in the release history, check the Github issues for the package. There are still several loaders/plugins that have not yet upgraded themselves to be compatible with Webpack v4, and these will usually have one or more Github issues related to this incompatibility.
+If you run into a package that does not appear to be compatible with Webpack v4, and their release history does not have a compatibility update, check the Github issues page for the package! You may have come across a package that has not yet been made compatible with the newest version of Webpack.
 
 Aside from issues that were resolved simply by upgrading a package, we also ran into a number of errors that were a little more unique. The following sections will describe three errors that we think a lot of people will also run into during their upgrade.
 
@@ -150,8 +150,8 @@ Another error that we ran into looked like this:
 
 ```
 Error: Chunk.entrypoints: Use Chunks.groupsIterable and filter by instanceof Entrypoint instead
-    at Chunk.get (/home/vagrant/clio/themis/node_modules/webpack/lib/Chunk.js:712:9)
-    at /home/vagrant/clio/themis/node_modules/extract-text-webpack-plugin/dist/index.js:176:48
+    at Chunk.get (node_modules/webpack/lib/Chunk.js:712:9)
+    at node_modules/extract-text-webpack-plugin/dist/index.js:176:48
 ```
 
 This time, the error itself is not as important as its source. In this case, the culprit is `extract-text-webpack-plugin`. This is another one of those "documented breakages." In prior versions of Webpack, the `extract-text-webpack-plugin` was commonly used to lift CSS out of compiled JS bundles and into dedicated CSS asset files. We, too, used it for this purpose. The Webpack team now recommends using `mini-css-extract-plugin` for this role, but `extract-text-webpack-plugin` is still around as it has other use cases as well.
@@ -212,7 +212,7 @@ So after upgrading a bunch of loaders and plugins, and reconfiguring a small num
 
 **INSERT CELEBRATION GIF**
 
-Estatic, we were eager to start benchmarking our compilation process and comparing it against our previous set-up with Webpack v3. And this is when joy into slight disappointment.
+Ecstatic, we were eager to start benchmarking our compilation process and comparing it against our previous set-up with Webpack v3. And this is when joy turned into slight disappointment.
 
 Don't get us wrong, we did actually see **significant** performance improvements just as the Webpack team has promised. Our tests showed that Apollo was compiling around 60 ~ 80 seconds faster in v4 than in v3, which is an incredible gain. We also saw noticeable improvements in recompilation times under `--watch` mode, leading to shorter code-compile-debug cycles.
 
