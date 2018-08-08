@@ -2,25 +2,19 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application, now dubbed Old Clio, is a Rails application that relied on a backend templating engine. The revamp, codenamed Apollo, is a single page application compiled using Webpack.
+Clio's main software offering received a revamp in 2017. Our legacy application, referred to as Themis, is a Rails application that relied on a backend templating engine. The revamp, codenamed Apollo, is a single page application compiled using Webpack.
 
-(I don't think we want to say "Old Clio" in a public form)
+Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis as well as Apollo.
 
-Our Production Engineering team set up an automated system for building newer versions of Apollo. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code and running tests as dictated by our set-up.
-
-This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it. However, as Apollo grew in size, so too did the amount of time it took for it to be built on CI. Soon after (describe the point in time), we reached our tipping point.
-
-Before going any further, I would like to quickly mention who exactly we are. We are the Front End Infrastructure (FEI) team. Our mission is to create an amazing front-end development environment here at Clio. As a part of this mission, we are responsible for overseeing the usage and maintenance of various front-end technologies.
-
-(This is awkward. I'd suggest either working it into your intro, or throwing it in your bio at the end.)
+This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it.  However, as Apollo grew in size, so too did the amount time it took for CI to build our app. Soon after April, we reached our tipping point.
 
 ## Red Alert
 
-In early May 2018, the FEI team started receiving a stream of alerts in our Slack channel. Our team members were frustrated by the amount of time it was taking to compile Apollo, and a number of people even reported compilation failures.
+In early May 2018, the Front End Infrastructure (FEI) team started receiving a stream of alerts in our Slack channel. Our team members were frustrated by the amount of time it was taking for CI to finish compiling, and a number of people even reported compilation failures.
 
-Looking at BuildKite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, there were also a number of builds that failed after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
+Looking at BuildKite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, some also failed after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
 
-After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our application has grown to a size where Webpack could no longer compile it within the memory limits placed upon it.
+After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our CI agents have a limited amount of memory that is shared by a bunch of different processes. As Apollo grew in size, Webpack started to consume more and more memory. When it approached and exceeded the memory limit, it started to slow down and eventually fail. Webpack does not account for the entire compilation time, but it is the process that has grown the quickest and pushed us over the edge.
 
 So how could we resolve this issue? If money was no object, we could have upgraded to instances with more RAM. However, we felt that our application's current complexity did not justify such an expense and the issue was most likely the result of poor optimization. As such, we got down to the business of optimizing our build.
 
@@ -95,7 +89,7 @@ Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot re
 
 Webpack has really good stack traces when these types of errors occur, and they will usually tell you which loader/plugin the error is coming from. In the examples above, you can see that the culprits were `fork-ts-checker-webpack-plugin` and `fast-sass-loader` respectively.
 
-Luckily, Webpack gave the community plenty of notice before pushing out the breaking changes in v4, so most loaders/plugins  had a chance to upgrade themselves to be compliant with the new standards.
+Luckily, Webpack gave the community plenty of notice before pushing out the breaking changes in v4, so most loaders/plugins had a chance to upgrade themselves to be compliant with the new standards.
 
 Our strategy was to search for the loader/plugin on Github, look at their release history, and try to find a release that explicitly states support for Webpack v4. If such a release existed, we would upgrade our package to the latest version.
 
@@ -220,9 +214,7 @@ After upgrading a bunch of loaders and plugins, and reconfiguring a small number
 
 Estatic, we were eager to start benchmarking our compilation process and comparing it against our previous set-up with Webpack v3. And this is when joy turned into slight disappointment.
 
-Don't get us wrong, we did actually see **significant** performance improvements, just as the Webpack team promised. Our tests showed that Apollo was compiling around 60 ~ 80 seconds faster in v4 than in v3, which is an incredible gain. We also saw noticeable improvements in recompilation times under `--watch` mode, leading to shorter code-compile-debug cycles.
-
-(Is that 60-80 seconds out of 20 minutes? If so, I'm not sure I'd consider that "incredible" but I also don't have that much technical context.)
+Don't get us wrong, we did see **significant** performance improvements, just as the Webpack team promised. When not limited by memory, Webpack v4 cuts down the compile time for Apollo by around 30 ~ 40%, which is :fire:. We also saw noticeable improvements in `--watch` recompilation times, giving us shorter code-compile-debug cycles.
 
 However, we did not see a significant improvement in Webpack's memory usage. After performing some basic tests, we found that it was still running over the memory limit we have on our CI agents. This meant it was back to the drawing board for us.
 
