@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application, referred to as Themis, is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
+Clio's main software offering received a revamp in 2017. Our legacy application is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
 
 Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis as well as Apollo.
 
@@ -26,13 +26,13 @@ When Webpack v4 was released, its headline was [performance](https://medium.com/
 
 The second reason is more simple: we already had the Webpack v4 upgrade on our roadmap. Being a major version bump, it was possible that any optimizations we implemented while on Webpack v3 would be moot once the (eventual) upgrade was completed. Therefore, we agreed it was worth it to upgrade now, see what it gives us, and improve things from there.
 
-Apollo was built with a blend of many different front-end technologies. CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
+Apollo was built with a blend of many different front-end technologies. Legacy CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
 
 With such a "mature" Webpack v3 set-up, the upgrade to Webpack v4 was not straightforward. The rest of this article will provide a description of the strategy we used to upgrade to the latest version, with an emphasis on the issues we encountered and how we went about resolving them.
 
 ## The Upgrade
 
-The actual upgrading of Webpack itself is simple. We use `yarn` to manage our Node modules, so, to upgrade to Webpack v4, we simply ran:
+The actual upgrading of Webpack itself is simple. We use [yarn](https://yarnpkg.com) to manage our Node modules, so, to upgrade to Webpack v4, we simply ran:
 
 ```
 yarn upgrade webpack@v4.8.3
@@ -69,7 +69,7 @@ It is likely that a number of your plugins and loaders are broken as a result of
 
 A typical plugin error looks like this:
 
-```
+```bash
 node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
     _this.compiler.applyPluginsAsync('fork-ts-checker-service-before-start', function () {
                            ^
@@ -79,7 +79,7 @@ TypeError: _this.compiler.applyPluginsAsync is not a function
 
 And a typical loader error looks like this:
 
-```
+```bash
 ERROR in ./client-src/themisui-vendor.scss
 Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot read property 'context' of undefined
     at getLoaderConfig (node_modules/fast-sass-loader/lib/index.js:72:29)
@@ -99,7 +99,7 @@ Aside from issues that were resolved by simply upgrading a package, we also ran 
 
 One of the errors we got during our upgrade was this:
 
-```
+```bash
 Error: webpack.optimize.CommonsChunkPlugin has been removed, please use config.optimization.splitChunks instead.
 ```
 
@@ -107,7 +107,7 @@ Like many other Webpack projects, we used the `CommonsChunkPlugin` to generated 
 
 To accomplish this, we had the following set-up in our Webpack configuration file:
 
-```js
+```javascript
 plugins: [
   new webpack.optimize.CommonsChunkPlugin({
     name: 'apollo-vendor',
@@ -121,9 +121,9 @@ plugins: [
 ],
 ```
 
-In Webpack v4, the `CommonsChunkPlugin` was deprecated. Instead, Webpack has introduced a new configuration property, `optimization`, that handles various output optimization settings. Luckily, our usage of the `CommonsChunkPlugin` was fairly standard, and we were able to find a direct translation of our old configuration:
+In Webpack v4, the [CommonsChunkPlugin](https://webpack.js.org/plugins/commons-chunk-plugin/) was deprecated. Instead, Webpack has introduced a new configuration property, `optimization`, that handles various output optimization settings. Luckily, our usage of the `CommonsChunkPlugin` was fairly standard, and we were able to find a direct translation of our old configuration:
 
-```js
+```javascript
 optimization: {
   splitChunks: {
     cacheGroups: {
@@ -146,7 +146,7 @@ So by removing all instances of the `CommonsChunkPlugin` from the `plugins` arra
 
 Another error that we ran into looked like this:
 
-```
+```bash
 Error: Chunk.entrypoints: Use Chunks.groupsIterable and filter by instanceof Entrypoint instead
     at Chunk.get (node_modules/webpack/lib/Chunk.js:712:9)
     at node_modules/extract-text-webpack-plugin/dist/index.js:176:48
@@ -156,7 +156,7 @@ This time, the error itself was not as important as its source. In this case, th
 
 To deal with this error, you actually have two options. In the long-term, you probably want to use `mini-css-extract-plugin`. But, if you want to "park" that and do it in a later fix, you can actually upgrade `extract-text-webpack-plugin` to one of its beta releases. This is what we did:
 
-```
+```bash
 yarn upgrade extract-text-webpack-plugin@v4.0.0-beta.0
 ```
 
@@ -166,7 +166,7 @@ Without changing any other plugins/configurations, this was sufficient for resol
 
 The last "special issue" we ran into while upgrading is this one:
 
-```
+```bash
 FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory
 ```
 
@@ -174,7 +174,7 @@ Out of context, this error could mean literally anything, so it was a bit harder
 
 In previous versions of Webpack, you would use the `UglifyJSPlugin` by including it in the `plugins` array of your configuration object:
 
-```js
+```javascript
 plugins: [
   new webpack.optimize.UglifyJsPlugin({
     // ... This object configures the behaviour of the plugin
@@ -184,7 +184,7 @@ plugins: [
 
 In Webpack v4, this syntax is no longer supported. In its place, the `optimization.minimizer` property now takes on the role of telling Webpack how it should optimize the size of output bundles:
 
-```js
+```javascript
 // Remember to require the plugin
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 
