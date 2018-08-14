@@ -177,7 +177,7 @@ In previous versions of Webpack, you would use the `UglifyJSPlugin` by including
 ```javascript
 plugins: [
   new webpack.optimize.UglifyJsPlugin({
-    // ... This object configures the behaviour of the plugin
+    // ... Specify options for UglifyJs here
   }),
 ]
 ```
@@ -193,16 +193,16 @@ module.exports = {
   optimization: {
     minimizer: [ // This array tells Webpack which minimizers it should use
       new UglifyJsPlugin({
-        // ... Specify options of UglifyJS here
+        // ... Specify options for UglifyJs here
       })
     ]
   },
 }
 ```
 
-In our production Webpack set-up, we found that we were still using the old `plugins` array syntax. Knowing this was definitely wrong, we removed it and tried our compilation again, just to see what happens. To our surprise, this resolved the issue!
+In our production Webpack set-up, we found that we were still using the old syntax to include and configure `UglifyJsPlugin`. Thus, we removed this item from our `plugins` array and put our configurations under `optimization.minimizer` instead. This change, as it turns out, was enough to resolve our issue.
 
-It is also worth noting that, thanks to Webpack's `mode` defaults, you don't have to specify `optimization.minimizer` in order to get uglification. By default, if your `mode` is set to `"production"`, Webpack will perform uglification on the output. So, by simply removing the `UglifyJsPlugin` from our `plugins` array and making sure our `mode` is set properly, we were able to get past this error and still have optimized output.
+As a side note, thanks to the new `mode` options in v4, Webpack now performs uglification by default in `production` mode. How is this different from Webpack v3? Well, in v3, if you do not explicitly include `UglifyJsPlugin` in the `plugins` array, no uglification will occur on the output. However, in v4, if you are running in `production` mode, uglification will occur even if `optimization.minimizer` is not specified.
 
 ## Conclusion
 
