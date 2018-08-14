@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack.
+Clio's main software offering received a revamp in 2017. Our legacy application, dubbed Themis, is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack and backed by our [public API](https://app.clio.com/api/v4/documentation).
 
-Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis as well as Apollo.
+Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis and Apollo.
 
 This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it.  However, as Apollo grew in size, so too did the amount time it took for CI to build our app. Soon after April, we reached our tipping point.
 
@@ -12,7 +12,7 @@ This process has served our developers well, and it has enabled "Single Click Sh
 
 In early May 2018, the Front End Infrastructure (FEI) team started receiving a stream of alerts in our Slack channel. Our team members were frustrated by the amount of time it was taking for CI to finish compiling, and a number of people even reported compilation failures.
 
-Looking at BuildKite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, some also failed after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
+Looking at BuildKite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, some were also failing after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
 
 After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our CI agents have a limited amount of memory that is shared by a bunch of different processes. As Apollo grew in size, Webpack started to consume more and more memory. When it approached and exceeded the memory limit, it started to slow down and eventually fail. Webpack does not account for the entire compilation time, but it is the process that has grown the quickest and pushed us over the edge.
 
@@ -26,7 +26,7 @@ When Webpack v4 was released, its headline was [performance](https://medium.com/
 
 The second reason is more simple: we already had the Webpack v4 upgrade on our roadmap. Being a major version bump, it was possible that any optimizations we implemented while on Webpack v3 would be moot once the (eventual) upgrade was completed. Therefore, we agreed it was worth it to upgrade now, see what it gives us, and improve things from there.
 
-Apollo was built with a blend of many different front-end technologies. Legacy CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
+Apollo was built with a blend of many different front-end technologies. CoffeeScript (for a few legacy features), TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
 
 With such a "mature" Webpack v3 set-up, the upgrade to Webpack v4 was not straightforward. The rest of this article will provide a description of the strategy we used to upgrade to the latest version, with an emphasis on the issues we encountered and how we went about resolving them.
 
