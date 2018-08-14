@@ -26,7 +26,7 @@ When Webpack v4 was released, its headline was [performance](https://medium.com/
 
 The second reason is more simple: we already had the Webpack v4 upgrade on our roadmap. Being a major version bump, it was possible that any optimizations we implemented while on Webpack v3 would be moot once the (eventual) upgrade was completed. Therefore, we agreed it was worth it to upgrade now, see what it gives us, and improve things from there.
 
-Apollo was built with a blend of many different front-end technologies. [Can you explain why we're using all of these different technologies? Maybe just a brief mention of still needing to support legacy coffeescript alongside our new use of typescript.] Legacy CoffeeScript, TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
+Apollo was built with a blend of many different front-end technologies. CoffeeScript (for a few legacy features), TypeScript, AngularJS and Sass are the main ingredients in this blend, complemented with healthy dosages of many other libraries and tools. As a result, our Webpack configuration is rather heavy: we have at least 3 different build environments and use more than 20 loaders and 9 plugins.
 
 With such a "mature" Webpack v3 set-up, the upgrade to Webpack v4 was not straightforward. The rest of this article will provide a description of the strategy we used to upgrade to the latest version, with an emphasis on the issues we encountered and how we went about resolving them.
 
