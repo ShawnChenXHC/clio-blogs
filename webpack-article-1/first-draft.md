@@ -2,10 +2,9 @@
 
 ## Introduction
 
-Clio's main software offering received a revamp in 2017. Our legacy application is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack. [Could potentially mention that it's powered mostly by our public API]
+Clio's main software offering received a revamp in 2017. Our legacy application, dubbed Themis, is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack and backed by our [public API](https://app.clio.com/api/v4/documentation).
 
 Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis and Apollo.
-[You don't define what Themis is]
 
 This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it.  However, as Apollo grew in size, so too did the amount time it took for CI to build our app. Soon after April, we reached our tipping point.
 
