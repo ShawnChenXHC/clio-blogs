@@ -105,3 +105,26 @@ We ran the script three times and uploaded the files to [plot.ly](https://plot.l
 https://plot.ly/~XiaoChenClio/16/
 
 As you can see, with our current configuration, Webpack finishes compilation in around 110 ~ 120s. At the very most, our Webpack compilation appears to use about 1.4 million Kilobytes of memory (Or, 1.4GB).
+
+Now that we had an idea of what our Webpack build costs, what could we do? Well, this is where some knowledge about Node came in handy. Node uses V8 and can thus accept a number of command line options that configure the way V8 behaves. One of these is `--max-old-space-size`. To summarize Irina's [post](https://medium.com/@_lrlna/garbage-collection-in-v8-an-illustrated-guide-d24a952ee3b8), V8's memory management strategy divides up the heap into two parts: old space and new space. Objects in the old space are not subject to the frequent scavenging that occurs in the new space and are only garbage-collected when its capacity is reached. Therefore, if you set a lower capacity on the old space than the V8 default, it should lead to more garbage collections, albeit at the cost of total runtime.
+
+So, with this knowledge, we altered our `build:webpack` command to the following:
+
+```
+"build:webpack": "NODE_ENV=production node --max-old-space-size=1024 ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js",
+```
+
+We ran our build with `--max-old-space-size` set to 1GB to test how it would run, then tried again with it set to 896MB. We also tried it at 768GB, but our build failed when we did that. Here are the results of the trials:
+
+![Webpack Memory Plot Old Space](assets/plot-old-space.png)
+https://plot.ly/~XiaoChenClio/16/
+
+As you can see, the when we lowered it down to 1GB, we reduced the amount of memory used by Webpack by around ~200MB, at the runtime cost of +10~20s, which is not bad at all. But when we lowered it down to 896MB, the reduction in memory we saw is negligible, especially considering the runtime cost we suffer.
+
+### Key takeaways
+
+**TODO**
+
+## The Whitebox Approach
+
+Let's face it, you can only get so far with a blackbox approach. When shit hits the fan, you've gotta open that fucking box and poke around in it. So, that's what we proceeded to do.
