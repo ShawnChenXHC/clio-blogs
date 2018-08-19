@@ -20,7 +20,7 @@ Well, first, we created a command:
 
 When we run this command, we get the following console output:
 
-![Starting Webpack in Node Inspect Mode](inspect-mode.png)
+![Starting Webpack in Node Inspect Mode](assets/inspect-mode.png)
 
 So a new Node process has been started and it is currently waiting for a debugger connection.
 
@@ -46,6 +46,6 @@ This returned a JSON object:
 
 Open another tab and paste in the link under `devtoolsFrontendUrl`, and you should see something like:
 
-![Using Chrome to Debug Webpack](chrome-inspector-webpack.png)
+![Using Chrome to Debug Webpack](assets/chrome-inspector-webpack.png)
 
 Whoa, that's CRAZY. You've just managed to connect the Chrome Devtools to the Node process running Webpack! When you hit that play button, the Webpack compilation process will start! Best of all, you can do everything you would normally do within the Chrome Devtools, meaning you can now use the Memory panel to monitor Webpack's memory usage!

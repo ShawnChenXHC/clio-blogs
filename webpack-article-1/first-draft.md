@@ -4,7 +4,7 @@
 
 Clio's main software offering received a revamp in 2017. Our legacy application, dubbed Themis, is a Ruby on Rails application that uses ERB templates to serve up the views. The revamp, codenamed Apollo, is a single page application compiled together using Webpack and backed by our [public API](https://app.clio.com/api/v4/documentation).
 
-Our Production Engineering team set up an automated system for building newer versions of our app. We use BuildKite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis and Apollo.
+Our Production Engineering team set up an automated system for building newer versions of our app. We use Buildkite as our continuous integration (CI) platform. The system is pretty slick: whenever a developer checks code into our repository, a new build is created and run automatically, compiling the source code for both Themis and Apollo.
 
 This process has served our developers well, and it has enabled "Single Click Shipping": Commit your code, wait for CI, and press a single button to ship it.  However, as Apollo grew in size, so too did the amount time it took for CI to build our app. Soon after April, we reached our tipping point.
 
@@ -12,7 +12,7 @@ This process has served our developers well, and it has enabled "Single Click Sh
 
 In early May 2018, the Front End Infrastructure (FEI) team started receiving a stream of alerts in our Slack channel. Our team members were frustrated by the amount of time it was taking for CI to finish compiling, and a number of people even reported compilation failures.
 
-Looking at BuildKite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, some were also failing after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
+Looking at Buildkite, we were greeted with a horrendous sight. Not only were most successful builds taking upwards of 20 minutes to compile, some were also failing after running for similar lengths of time. Developer frustrations aside, this was unacceptable because it hindered Clio's ability to respond effectively in emergency situations. For the FEI team, it was all-hands-on-deck.
 
 After some initial investigation, we determined that the issue was caused by the depletion of RAM on our remote CI agents. In short, our CI agents have a limited amount of memory that is shared by a bunch of different processes. As Apollo grew in size, Webpack started to consume more and more memory. When it approached and exceeded the memory limit, it started to slow down and eventually fail. Webpack does not account for the entire compilation time, but it is the process that has grown the quickest and pushed us over the edge.
 

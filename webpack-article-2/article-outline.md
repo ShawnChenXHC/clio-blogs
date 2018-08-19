@@ -14,12 +14,28 @@ The following is an overview of the sections that I think will be in this articl
      * Exactly what our CI system does when it runs our app's compile
      * What our threshold is, what we wanted Webpack to limit itself to, and what it is currently at
      * What Webpack does during compilation, the processes that were ran
-2. The process
-   * How we measured Webpack's memory usage
-3. The investigation/improvements
-   *
-4. The conclusions
-   *
+2. The Blackbox approach
+   * In this approach, we treat our Webpack build as a black box and tried to measure it from the outside
+   * Tools used:
+     * `ps`, `top`
+     * Node script that tracks memory usage over time
+   * Key takeaways:
+     * You can place "soft limits" on the memory with Node options, to do so, you cannot use the binary provided by Webpack, you have to call Node yourself
+     * These "soft limits" are created by the Node option `--max-old-space-size`
+     * 1gb is probably a pretty good limit to have for most people, but best to adjust according to project
+ 3. The Whitebox approach
+    * In this approach, we peek right into Webpack and see exactly what our build is made up of
+    * Tools used:
+      * Script from before
+      * Node + Chrome dev tools debugging goodies
+      * Isolation
+    * Key takeaways:
+      * Memory spikes hard in plugins stage
+      * Be careful with your SCSS
+      * Be weary of parallel processes
+4. It's a Rails thing
+   * This is a more niche piece of advice: If your application is a Rails application that uses the Webpacker gem to integrate Webpack with the Rails asset pipeline, you may find it useful to split Webpack out of the asset pipeline and compile it independently
+5. Conclusions
 
 Timeline of events:
 
