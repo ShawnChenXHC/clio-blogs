@@ -18,48 +18,56 @@ We have multiple pipelines for doing all sorts of stuff, but the focus of this a
 
 1. It clones the Github repo and checks out the commit that triggered the build
 2. It performs a number of preparatory tasks such as installing Node modules
-3. It executes `rake assets:precompile`, which is the Rails command for kicking off compilation in the Rails asset pipeline
-4. This compiles all of the assets for legacy Clio and, because we use the [Webpacker](https://github.com/rails/webpacker) gem, also starts Webpack to compile new Clio (Henceforth referred to as Apollo)
+3. It compiles all of the assets in the Rails asset pipeline (mainly used for our legacy application)
+4. It compiles our revamped application, Apollo, using Webpack
 
-This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large`, which comes with 4GB of memory. Because of background processes, by the time `rake assets:precompile` begins, there is only around 2GB of memory available to be shared among the "actual" compilation processes. As the size of Apollo grew, Webpack started demanding more and more memory. Eventually, as Webpack was starved of the memory it needs, we started experiencing excruciatingly slow builds with intermittent failures.
+This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large`, which comes with 4gb of memory. But because of other processes, by the time Webpack begins, there is only around 2gb of memory available for it to use. As the size of Apollo grew, Webpack started demanding more and more memory. Eventually, as Webpack was starved of the memory it needs, we started experiencing excruciatingly slow builds with intermittent failures.
+
+Now that the problem has been clearly identified, let's talk about the ways we tried to deal with it.
 
 ## The Blackbox Approach
 
-Now that the problem has been clearly identified, let us begin talking about the solutions.
-
-I would like to introduce the first approach we took as the "blackbox" approach, in reference to the blackbox method of testing that many programmers are familiar with. In this approach, we treated our Webpack process as a "black box" that can only be examined and controlled from the outside.
-
-Let me explain.
+I would like to introduce the first approach we took as the "blackbox" approach, in reference to the blackbox testing method that many programmers are familiar with. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
 
 No matter how complex your Webpack project may be, Webpack is still just a Node program that must conform to all of the normal rules that apply to any other Node program.
 
 This means two things. First, when Webpack is running, you should be able to examine it using the `ps` utility. Second, because it is a Node program, you should be able to configure the Node process that runs it using standard CLI options, such as `--max-old-space-size`.
 
-Before going further, I would like to mention that for this analysis, we temporarily removed all parallelized processes from our Webpack set-up, such as parallel uglification and `fork-ts-checker`. This reduced the complexity of our analysis and you may find it beneficial to do the same. With that said, let's dive into the details.
+Let me show you how we used these tools.
 
-To begin our analysis, we set up a command in our `package.json`:
+To begin our analysis, we took the command that we use to compile Apollo on CI:
 ```
-"build:webpack": "NODE_ENV=production webpack --progress --config ./config/webpack/production.js",
+NODE_ENV=production webpack --progress --config ./config/webpack/production.js
 ```
 
-With this, when we run `yarn build:webpack` from the root of our project, we should be running a compilation with configurations identical to what Webpacker uses to start Webpack during `rake assets:precompile`.
+And stuck it into our `package.json`:
+```JSON
+{
+  "scripts": {
+    "build:webpack": "NODE_ENV=production webpack --progress --config ./config/webpack/production.js"    
+  }
+}
+```
+
+This allowed us run our Webpack compilation by simply typing `yarn build:webpack`.
 
 With Webpack running, we opened up another terminal window and executed:
 ```
 ps ufaxww
 ```
 
-`ps` is a Unix utility for printing out a snapshot of all active processes. By passing `ufaxww`, the output that will not only show the details (Including memory usage) of all active processes, but also group them together according to parent-child relationships.
+`ps` is a Unix utility for printing out a snapshot of all active processes. By passing `ufaxww`, the output will show you the details of all active processes and also group together parent-child processes.
 
 For example, here is the output we saw when we ran this command, truncated to focus on Webpack-related processes:
 
 ```sh
-vagrant  28922  2.0  1.0 1138236 64668 pts/0   Sl+  21:40   0:00 node /usr/local/bin/yarn build:webpack
-vagrant  28932  0.0  0.0   4300   812 pts/0    S+   21:40   0:00  \_ /bin/sh -c NODE_ENV=production webpack --progress --config ./config/webpack/production.js
-vagrant  28933 88.7  7.1 1550560 435704 pts/0  Rl+  21:40   0:15      \_ node /home/vagrant/clio/webpack/themis/node_modules/.bin/webpack --progress --config ./config/webpack/production.js
+vagrant   3617  0.8  1.0 1138236 64720 pts/0   Sl+  17:45   0:00  node /usr/local/bin/yarn build:webpack
+vagrant   3627  0.0  0.0   4300   772 pts/0    S+   17:45   0:00   \_ /bin/sh -c NODE_ENV=production node ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js
+vagrant   3628 68.7  9.7 1700668 599088 pts/0  Rl+  17:45   0:29       \_ node ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js
+vagrant   3634 27.5  5.6 1151908 345332 pts/0  Sl+  17:45   0:11           \_ /usr/local/stow/nodejs-8.9.4/bin/node /home/vagrant/clio/webpack/themis/node_modules/fork-ts-checker-webpack-plugin/lib/service.js
 ```
 
-The sixth column from the left represents the amount of physical memory being consumed by the process on that line. The first two lines are actually generated by `yarn`, which we were using to execute the `build:webpack` command. The last line is the actual Node process that is running Webpack. As you can see, when this snapshot was taken, Webpack was consuming roughly 436MB of memory.
+The sixth column from the left represents the amount of physical memory (in kb) being consumed by the process on that line. The first two lines are actually generated by `yarn`, which we were using to execute the `build:webpack` command. The third line is the actual Webpack process. The forth line is a parallel process spawned by a plugin called `fork-ts-checker-webpack-plugin` which we use to try and speed up our build. All in all, Webpack was consuming roughly 944mb of memory when this snapshot was taken.
 
 Now that we had a sense of what is actually running when Webpack begins, we got rid of the extraneous output and asked for a summary statistic instead:
 ```
@@ -71,7 +79,7 @@ This command will filter down the output from `ps` to only lines that contain th
 But a single snapshot is not all that useful. So we made a Node script:
 
 ```js
-// webpack-memory-csv.js
+// profile-memory.js
 var process = require("process");
 var childProcess = require("child_process");
 
@@ -97,34 +105,44 @@ webpack.stderr.on("data", (data) => {
 });
 ```
 
-We placed this script at the root of our project. When ran, this script starts an interval timer that outputs the total amount of memory used by Webpack every 10th of a second. "Simutaneously," it also starts a new Webpack build by running the same command we put into our `package.json`. And here's the kicker: the output in CSV format. So, if we pipe the output into a file, we get a CSV file that can be used by all of your favorite graphing applications.
+When executed, `profile-memory.js` starts a new Webpack build. Then, as the build runs, a function is executed every 10th of a second that grabs the total memory being used and writes the result to standard output. Conveniently, the output of the script has been designed to be easily consumable by graphing applications.
 
 We ran the script three times and uploaded the files to [plot.ly](https://plot.ly) to create this graph. :chart_with_upwards_trend:
 
 ![Webpack Memory Plot Baseline](assets/plot-baseline.png)
 https://plot.ly/~XiaoChenClio/16/
 
-As you can see, with our current configuration, Webpack finishes compilation in around 110 ~ 120s. At the very most, our Webpack compilation appears to use about 1.4 million Kilobytes of memory (Or, 1.4GB).
+As you can see, with our current configuration, Webpack finishes compilation in around 120 ~ 130s. At the very most, our Webpack compilation appears to use about 2 million kilobytes (2gb) of memory.
 
-Now that we had an idea of what our Webpack build costs, what could we do? Well, this is where some knowledge about Node came in handy. Node uses V8 and can thus accept a number of command line options that configure the way V8 behaves. One of these is `--max-old-space-size`. To summarize Irina's [post](https://medium.com/@_lrlna/garbage-collection-in-v8-an-illustrated-guide-d24a952ee3b8), V8's memory management strategy divides up the heap into two parts: old space and new space. Objects in the old space are not subject to the frequent scavenging that occurs in the new space and are only garbage-collected when its capacity is reached. Therefore, if you set a lower capacity on the old space than the V8 default, it should lead to more garbage collections, albeit at the cost of total runtime.
+Now that we had an idea of what our Webpack build costs, what could we do? Well, this is where some knowledge about Node came in handy. Node uses V8 and can accept a number of command line options that configure the way V8 behaves. One of these is `--max-old-space-size`. To summarize Irina's [post](https://medium.com/@_lrlna/garbage-collection-in-v8-an-illustrated-guide-d24a952ee3b8), V8's memory management strategy divides up the heap into two parts: old space and new space. Objects in the old space are not subject to the frequent scavenging that occurs in the new space and are only garbage-collected when its capacity is reached. Therefore, if you set a lower capacity on the old space than the V8 default, it should lead to more garbage collections, albeit at the cost of total runtime. `--max-old-space-size` accepts a single number, interpreted as the maximum size of the old space in megabytes.
 
-So, with this knowledge, we altered our `build:webpack` command to the following:
+So, with this knowledge, we changed our `build:webpack` command so that we can control the size of the old space:
 
 ```
-"build:webpack": "NODE_ENV=production node --max-old-space-size=1024 ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js",
+"build:webpack": "NODE_ENV=production node --max-old-space-size=SIZE ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js",
 ```
 
-We ran our build with `--max-old-space-size` set to 1GB to test how it would run, then tried again with it set to 896MB. We also tried it at 768GB, but our build failed when we did that. Here are the results of the trials:
+We tried three different values for `SIZE`: 1024, 896 and 768. Our project compiled successfully at both 1024 and 896, but failed at 768. Using `profile-memory.js`, the results of the two successful trials were logged. We created a graph to compare the results:
 
 ![Webpack Memory Plot Old Space](assets/plot-old-space.png)
-https://plot.ly/~XiaoChenClio/16/
+https://plot.ly/~XiaoChenClio/1/
 
-As you can see, the when we lowered it down to 1GB, we reduced the amount of memory used by Webpack by around ~200MB, at the runtime cost of +10~20s, which is not bad at all. But when we lowered it down to 896MB, the reduction in memory we saw is negligible, especially considering the runtime cost we suffer.
+As we reduced the maximum size of the old space, Webpack took longer to build our project, but the amount of memory it consumed also decreased. We found `--max-old-space-size=1024` to be a sweet spot, as it reduced the the maximum memory used by around 400mb, at acceptable cost of +10s in total compile time.
+
+It is also worth noting `--max-old-space-size` will have no effect on parallel processes spawned during compilation, such as `fork-ts-checker`. It only affects the immediate Node process it is passed to.
 
 ### Key takeaways
 
-**TODO**
+1. Good tooling is essential to solving any problem. Without it, you can't properly diagnose a problem nor can you validate different hypotheses
+2. Node let's you control the size of V8's old space; setting it to a lower value can help reduce the amount of memory Webpack takes to compile your project, at the cost of longer compile times.
 
 ## The Whitebox Approach
 
-Let's face it, you can only get so far with a blackbox approach. When shit hits the fan, you've gotta open that fucking box and poke around in it. So, that's what we proceeded to do.
+Admittedly, the effectiveness of the methods described in blackbox approach is limited:
+
+1. While `profile-memory.js` gives you a good high-level overview of your Webpack project, it does not tell you exactly where the memory usage is coming from
+2. While limiting old max space size may help reduce memory usage, it comes at the cost of longer runtimes and also have to be adjusted and increased over time as your project grows
+
+In short, thus far, we have only been able to identify the issue and find ways to mitigate it, as opposed to actually finding the root causes and addressing the problem directly.
+
+In order to do that, we must shine light on the box and look inside of it.
