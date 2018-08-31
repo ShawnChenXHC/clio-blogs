@@ -21,13 +21,13 @@ We have multiple pipelines for doing all sorts of stuff, but the focus of this a
 3. It compiles all of the assets in the Rails asset pipeline (mainly used for our legacy application)
 4. It compiles our revamped application, Apollo, using Webpack
 
-This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large`, which comes with 4gb of memory. But because of other processes, by the time Webpack begins, there is only around 2gb of memory available for it to use. As the size of Apollo grew, Webpack started demanding more and more memory. Eventually, as Webpack was starved of the memory it needs, we started experiencing excruciatingly slow builds with intermittent failures.
+This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large` and have 4gb of memory. Because of other processes that run concurrently with Webpack during compilation, our Production Engineering team has explained to us that we need to ensure Webpack take no more than 2gb of memory at any given time during the build. When Webpack start to exceed this limit, we begin to experience transient build failures in the compile pipeline.
 
 Now that the problem has been clearly identified, let's talk about the ways we tried to deal with it.
 
 ## The Blackbox Approach
 
-I would like to introduce the first approach we took as the "blackbox" approach, in reference to the blackbox testing method that many programmers are familiar with. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
+I would like to introduce the first approach we took as the "blackbox" approach. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
 
 No matter how complex your Webpack project may be, Webpack is still just a Node program that must conform to all of the normal rules that apply to any other Node program.
 
@@ -127,22 +127,32 @@ We tried three different values for `SIZE`: 1024, 896 and 768. Our project compi
 ![Webpack Memory Plot Old Space](assets/plot-old-space.png)
 https://plot.ly/~XiaoChenClio/1/
 
-As we reduced the maximum size of the old space, Webpack took longer to build our project, but the amount of memory it consumed also decreased. We found `--max-old-space-size=1024` to be a sweet spot, as it reduced the the maximum memory used by around 400mb, at acceptable cost of +10s in total compile time.
+As we reduced the maximum size of the old space, Webpack took longer to build our project, but the amount of memory it consumed also decreased. We found `--max-old-space-size=1024` to be a sweet spot, as it reduced the the maximum memory used by around 400mb, at the acceptable cost of +10s in total compile time.
 
 It is also worth noting `--max-old-space-size` will have no effect on parallel processes spawned during compilation, such as `fork-ts-checker`. It only affects the immediate Node process it is passed to.
 
 ### Key takeaways
 
+TODO Make this flow more
+
 1. Good tooling is essential to solving any problem. Without it, you can't properly diagnose a problem nor can you validate different hypotheses
 2. Node let's you control the size of V8's old space; setting it to a lower value can help reduce the amount of memory Webpack takes to compile your project, at the cost of longer compile times.
-
-## The Whitebox Approach
 
 Admittedly, the effectiveness of the methods described in blackbox approach is limited:
 
 1. While `profile-memory.js` gives you a good high-level overview of your Webpack project, it does not tell you exactly where the memory usage is coming from
 2. While limiting old max space size may help reduce memory usage, it comes at the cost of longer runtimes and also have to be adjusted and increased over time as your project grows
 
-In short, thus far, we have only been able to identify the issue and find ways to mitigate it, as opposed to actually finding the root causes and addressing the problem directly.
+## The Whitebox Approach
 
-In order to do that, we must shine light on the box and look inside of it.
+Not satisfied with the results given to us by the blackbox approach, we needed to dive deeper and use, you've guessed it, a whitebox approach.
+
+In this latter half of our investigation, we put on our detective hats and "unpacked" our Webpack project. Our objective was to find the culprits, perhaps some misconfigured plugin/loader, for Webpack's voracious demand for memory. Our thinking was, once found, we could pin the culprits up against a wall, and put them down with that silver bullet to resolve our woes once and for all.
+
+The reality, however, didn't turn out quite so neatly. While that mythical silver bullet was never found, we did gain large amounts of insight and several strategies for dealing with our Webpack compilation.
+
+### Isolation Testing
+
+
+
+### Using the Node Inspector

@@ -35,15 +35,15 @@ With such a "mature" Webpack v3 set-up, the upgrade to Webpack v4 was not straig
 The actual upgrading of Webpack itself is simple. We use [yarn](https://yarnpkg.com) to manage our Node modules, so, to upgrade to Webpack v4, we simply ran:
 
 ```
-yarn upgrade webpack@v4.8.3
+yarn upgrade webpack@4.8.3
 ```
 
-You'll notice that we specified the exact version. We do this with all of our Node modules to avoid any unintentional upgrades. Why `v4.8.3`? No particular reason, anything `v4.X.X` would have been fine, `v4.8.3` just happened to be the latest version available when we performed the upgrade.
+You'll notice that we specified the exact version. We do this with all of our Node modules to avoid any unintentional upgrades. Why `4.8.3`? No particular reason, anything `4.X.X` would have been fine, `4.8.3` just happened to be the latest version available when we performed the upgrade.
 
-Coupled with this upgrade, we also immediately upgraded `webpack-dev-server` to `v3.X.X` and added `webpack-cli`, which used to be a part of `webpack` but has been separated into another package in v4:
+Coupled with this upgrade, we also immediately upgraded `webpack-dev-server` to `3.X.X` and added `webpack-cli`, which used to be a part of `webpack` but has been separated into another package in v4:
 ```
-yarn upgrade webpack-dev-server@v3.1.4
-yarn add -D webpack-cli@v2.1.4
+yarn upgrade webpack-dev-server@3.1.4
+yarn add -D webpack-cli@2.1.4
 ```
 
 ## Are We Compiling Yet?
@@ -68,22 +68,6 @@ So, as familiar as this advice is to many, it is nevertheless worth repeating he
 It is likely that a number of your plugins and loaders are broken as a result of the upgrade to Webpack v4. Webpack v4 has made a number of breaking changes to its API, and if any of your plugins/loaders are relying on an older interface that has been changed, they will cause errors during the Webpack compilation process.
 
 A typical plugin error looks like this:
-
-```bash
-node_modules/fork-ts-checker-webpack-plugin/lib/index.js:143
-    _this.compiler.applyPluginsAsync('fork-ts-checker-service-before-start', function () {
-                           ^
-
-TypeError: _this.compiler.applyPluginsAsync is not a function
-```
-
-And a typical loader error looks like this:
-
-```bash
-ERROR in ./client-src/themisui-vendor.scss
-Module build failed: ModuleBuildError: Module build failed: TypeError: Cannot read property 'context' of undefined
-    at getLoaderConfig (node_modules/fast-sass-loader/lib/index.js:72:29)
-```
 
 Webpack has really good stack traces when these types of errors occur, and they will usually tell you which loader/plugin the error is coming from. In the examples above, you can see that the culprits were `fork-ts-checker-webpack-plugin` and `fast-sass-loader` respectively.
 
