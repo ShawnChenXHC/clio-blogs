@@ -27,7 +27,7 @@ Now that the problem has been clearly identified, let's talk about the ways we t
 
 ## The Blackbox Approach
 
-I would like to introduce the first approach we took as the "blackbox" approach. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
+We began with what could rightfully be considered a "blackbox" approach. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
 
 No matter how complex your Webpack project may be, Webpack is still just a Node program that must conform to all of the normal rules that apply to any other Node program.
 
@@ -143,16 +143,58 @@ Admittedly, the effectiveness of the methods described in blackbox approach is l
 1. While `profile-memory.js` gives you a good high-level overview of your Webpack project, it does not tell you exactly where the memory usage is coming from
 2. While limiting old max space size may help reduce memory usage, it comes at the cost of longer runtimes and also have to be adjusted and increased over time as your project grows
 
+Not satisfied with the blackbox approach? Well, neither were we. To make a medical analogy, if our Webpack memory issue was a sickness, then the blackbox approach has just told us exactly what our symptoms are and what a painkiller might be. But the true cause of our sickness is yet unknown. For that, we will need something more powerful.
+
 ## The Whitebox Approach
 
-Not satisfied with the results given to us by the blackbox approach, we needed to dive deeper and use, you've guessed it, a whitebox approach.
+Following the blackbox approach, we put on our safari hats and delve deep into our Webpack project. Our plan was, plain and simple, to identify the cause of Webpack's voracious demand for memory. In an ideal world, we would have identified a single issue, perhaps an non-optimized plugin, that both used a lot of memory and for which a straight-forward solution exists. However, if this were the case, I would have told you about it by now.
 
-In this latter half of our investigation, we put on our detective hats and "unpacked" our Webpack project. Our objective was to find the culprits, perhaps some misconfigured plugin/loader, for Webpack's voracious demand for memory. Our thinking was, once found, we could pin the culprits up against a wall, and put them down with that silver bullet to resolve our woes once and for all.
+The reality, as you can tell, didn't turn out so neatly. As opposed to finding that one silver bullet solution, the whitebox approach instead gave us:
 
-The reality, however, didn't turn out quite so neatly. While that mythical silver bullet was never found, we did gain large amounts of insight and several strategies for dealing with our Webpack compilation.
+* **Three** strategies for identifying memory bottlenecks
+* **Two** domain-specific solutions for reducing memory usage
+* **One** surprising discovery about our Webpack build
 
-### Isolation Testing
+And it is these things that I would like to now share with you.
 
+### Key takeaways
 
+* Identify and profile memory consumers in your Webpack set-up. Know what pieces incur the heaviest cost and prioritize optimization efforts accordingly.
+* If the time trade-off is acceptable, reduce the number of processes that are running parallel on the same machine
+* Scale horizontally (Across multiple machines) if possible
+
+### Three Strategies
+
+Continuing with the safari analogy, you might think of these strategies as the "tracks" we followed in our hunt. Not all of them led to solutions, but each approached the memory issue from a different angle and, as a result, deserves to be mentioned here.
+
+In our first strategy, we examined the way we configured Webpack. Generally speaking, a Webpack project is configurable in three different ways: by adjusting Webpack's native options, by adding custom plugins, and by adding custom loaders. In our case, since we did not see anything suspicious with our native options, we focused on our plugins and loaders instead.
+
+Beginning with the plugins we used in our production environment, we disabled each of them individually (Most of the time, this was as simple as just commenting it out of our `plugins` array) and ran `profile-memory.js` to get an idea of how much memory overhead it added during compilation.
+
+For example, one of the plugins we were using was the [ForkTsCheckerWebpackPlugin](github.com/Realytics/fork-ts-checker-webpack-plugin), which helped speed up our Webpack compilation by creating a separate process to perform all TypeScript typechecking. We disabled it and ran `profile-memory.js`. The results were then recorded:
+
+![Webpack Memory No Fork](assets/plot-fork-ts.png)
+https://plot.ly/~XiaoChenClio/12
+
+As surprising as this result was, it was also somewhat of a red herring. Without ForkTsChecker, we not only saw maximum memory usage decrease by around 200mb, but also a reduction of the total compile time by around 20s. However, This was purely due to the fact that, without ForkTsChecker and without turning back on typeschecking in ts-loader, Webpack was no longer performing any form of typechecking during compilation. Of course, we couldn't just forgo typechecking all-together, but this discovery did give us an idea that will be elaborated on shortly.
+
+For the record, we also found [SourceMapDevToolPlugin](https://webpack.js.org/plugins/source-map-dev-tool-plugin/) and [UglifyjsWebpackPlugin](https://webpack.js.org/plugins/uglifyjs-webpack-plugin/) to be heavy consumers of memory as well. But we couldn't find a good way to use this information.
+
+We then applied this process of "isolate-and-compile" to our loaders. We did this by using the [IgnoreLoader](https://github.com/cherrry/ignore-loader). So, for example, to measure the impact of the loaders we were using for CoffeeScript files, we would update our configuration like so:
+
+```js
+module: {
+  rules: [
+    {
+      test: /\.coffee(\.erb)?$/,
+      // loader: 'ng-annotate-loader!coffee-loader' // Comment out the actual loaders
+      loader: 'ignore-loader', // Tell Webpack to ignore all CoffeeScript files
+    },
+    // ...
+  ],
+}
+```
+
+The results of these tests, however, were not as useful as the plugins beforehand. We found that the loaders that incurred the heaviest memory tax were our TypeScript, CoffeeScript, and Sass loaders, but this was largely due to fact that these were the most common types of files in our project. We couldn't really replace these loaders: doing so would most likely achieve little, and it puts us at risk of breaking our app. So, the information, as interesting as it were, gave us little to actually work with.
 
 ### Using the Node Inspector
