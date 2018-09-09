@@ -183,18 +183,54 @@ For the record, we also found [SourceMapDevToolPlugin](https://webpack.js.org/pl
 We then applied this process of "isolate-and-compile" to our loaders. We did this by using the [IgnoreLoader](https://github.com/cherrry/ignore-loader). So, for example, to measure the impact of the loaders we were using for CoffeeScript files, we would update our configuration like so:
 
 ```js
-module: {
-  rules: [
-    {
-      test: /\.coffee(\.erb)?$/,
-      // loader: 'ng-annotate-loader!coffee-loader' // Comment out the actual loaders
-      loader: 'ignore-loader', // Tell Webpack to ignore all CoffeeScript files
-    },
-    // ...
-  ],
+// webpack configuration snippet
+module.exports = {
+  // ... Other configuration
+  module: {
+    rules: [
+      {
+        test: /\.coffee(\.erb)?$/,
+        // loader: 'ng-annotate-loader!coffee-loader' // Comment out the actual loaders
+        loader: 'ignore-loader', // Tell Webpack to ignore all CoffeeScript files
+      },
+      // ... other rules
+    ],
+  },
 }
 ```
 
 The results of these tests, however, were not as useful as the plugins beforehand. We found that the loaders that incurred the heaviest memory tax were our TypeScript, CoffeeScript, and Sass loaders, but this was largely due to fact that these were the most common types of files in our project. We couldn't really replace these loaders: doing so would most likely achieve little, and it puts us at risk of breaking our app. So, the information, as interesting as it were, gave us little to actually work with.
+
+So let's talk about the second strategy, which focuses instead on the actual bundles that Webpack generates. Here, we started by using the [Webpack Bundle Analyzer](https://github.com/webpack-contrib/webpack-bundle-analyzer) to visualize the shapes and sizes of our final, compiled bundles.
+
+The graph that we received from the Analyzer was very telling:
+
+![Bundles analyzed](assets/bundles-analyzed.png)
+
+The majority of our bundled JavaScript assets, as it turned out, came from our `node_modules` folder! What's more, within the code from `node_modules`, the largest part was by far from `lib-ThemisUI`. `lib-ThemisUI` is an internal components library that we have created for our web app. It is not a complex components library, and really should not take up such a large part of our bundled assets.
+
+Now that we had a suspect on our hands, we wanted to see what would happen to our compilation if we were to take `lib-ThemisUI` out of the equation. To do this, we used Webpack's [IgnorePlugin](https://webpack.js.org/plugins/ignore-plugin/) to ignore all attempts to include code from `lib-ThemisUI`:
+
+```js
+// webpack configuration snippet
+module.exports = {
+  // ... Other configuration
+  plugins: [
+    new webpack.IgnorePlugin(/lib-ThemisUI/),
+    // ... other plugins
+  ],
+}
+```
+
+With `lib-ThemisUI` out of the picture, we profiled our compilation again and recorded the results (If you are wondering why the compile times are faster, it's because these tests were ran on a slightly faster machine than the other tests):
+
+![No ThemisUI](assets/plot-no-themisui.png)
+https://plot.ly/~XiaoChenClio/28/
+
+In terms of memory, we saw the maximum memory used by Webpack decrease by around 150mb. The runtime difference is also worth noting: without `lib-ThemisUI`, total compilation time decreased by around 15s. On the surface, these results may not seem significant, that is until you consider the fact that `lib-ThemisUI` should be a simple, run-of-the-mill component library.
+
+The reason why `lib-ThemisUI` taxes us this heavily is because it is a *huge* import: As you can see, the curves of the two compilations are almost identical up until around x=750. This, incidentally, is when the things like uglification and source-map generation begins. Because `lib-ThemisUI` is being included, it too has to undergo this process. The sheer size of the import leads directly to greater consumption of memory and a longer compile time.
+
+Being a component library that merely defines a number of simple UI components like buttons and drop-down menus, we felt that the complexity of `lib-ThemisUI` did not justify its size. So, now that we identified this problem, what did we do? Well, nothing. I mean, we couldn't really do anything immediately. This issue requires us to look into our component library in greater detail and to identify exactly what is making it so large. We looked around for flagrant fouls, but didn't find any. Thus, we put it aside on our TODO list, and proceeded to our final strategy of investigation.
 
 ### Using the Node Inspector
