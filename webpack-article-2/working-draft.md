@@ -6,7 +6,17 @@
 
 ## Introduction
 
-This is the second half of a two-part series on how we use Webpack here at Clio. Last time, I talked briefly about the problems we faced running Webpack on our CI provider before transitioning over to discussing our upgrade path to Webpack v4. The narrative then ended on a bit of a cliff-hanger as I noted that the upgrade did not immediately solve our problems, so I would like to amend that in this article. Welcome to Wrangling with Webpack 2 - :zap: Electric Boogaloo :zap:.
+This is the second of a two-part series on how we use Webpack here at Clio. Last time, I talked briefly about the problems we faced running Webpack on our CI provider before transitioning into a exposition on our upgrade path to Webpack v4. The narrative then ended before I had a chance to explain how we actually dealt with our memory issues. In this sequel, I will dive into this memory issue in detail. Welcome to part two, :zap: Electric Boogaloo :zap:.
+
+### Disclaimer
+
+This is a rather long article, so, before continuing any further, I would like to mention a couple things. First, this article **does not** contain a perfect solution to resolving all Webpack-related memory issues. In fact, we ourselves are still in the process of looking for additional optimizations to our Webpack project, which, I'm sure others will agree, is a tricky business.
+
+Looking back on the solutions we developed, I realized just how project-specific they were. Thus, I was convinced that the most valuable part of our investigation was not the ultimate outcomes, but rather the process itself. As such, what follows in this article is a collection of diagnostic tools and methods for profiling Webpack's resource consumption during compilation.
+
+Because the journey is more important than the destination (Or so I've been told), this article details all of the different methods we've tried, regardless of whether or not they "worked." I am hoping that these ideas will prove useful to anyone who has experienced similar issues as us, or is simply interested in diving deeper into their Webpack project. You may find that none of these will be of any use to you, in that case, I apologize. But how would you know that without reading on?
+
+Okay, I'm done with this disclaimer. On with the show.
 
 ## Can You Repeat the Problem?
 
@@ -21,13 +31,20 @@ We have multiple pipelines for doing all sorts of stuff, but the focus of this a
 3. It compiles all of the assets in the Rails asset pipeline (mainly used for our legacy application)
 4. It compiles our revamped application, Apollo, using Webpack
 
-This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large` and have 4gb of memory. Because of other processes that run concurrently with Webpack during compilation, our Production Engineering team has explained to us that we need to ensure Webpack take no more than 2gb of memory at any given time during the build. When Webpack start to exceed this limit, we begin to experience transient build failures in the compile pipeline.
+This pipeline worked great, until it didn't. Our AWS EC2 instances are of type `c5.large` and have 4gb of memory. Because of other processes that run concurrently with Webpack during compilation, our Production Engineering team has explained to us that we need to ensure Webpack take no more than 2gb of memory at any given time during the build. When Webpack starts to exceed this limit, we begin to experience transient build failures in the compile pipeline.
 
-Now that the problem has been clearly identified, let's talk about the ways we tried to deal with it.
+Now that the problem has been clearly identified, let's talk about how we tried to deal with it.
 
 ## The Blackbox Approach
 
-We began with what could rightfully be considered a "blackbox" approach. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
+### TL;DR
+
+* Good tooling is essential: without it, you can't properly diagnose a problem nor can you validate different hypotheses
+* Use `ps ufaxww` to see all Webpack-related processes and their resources consumption
+* Node allows you to control the size of V8's old space with `--max-old-space-size=VALUE`; setting a lower value can help reduce the amount of memory Webpack takes to compile your project, at the cost of longer compile times
+* Using `--max-old-space-size` to control Webpack memory consumption is fragile; if the old space size is too low, Webpack compilation will fail. This means that as the size of your Webpack project grows, the old space size limit has to be adjusted accordingly
+
+We began with what could be considered a "blackbox" approach. In this approach, we treated our Webpack project as a "black box" that can only be examined and controlled from the outside.
 
 No matter how complex your Webpack project may be, Webpack is still just a Node program that must conform to all of the normal rules that apply to any other Node program.
 
@@ -40,7 +57,7 @@ To begin our analysis, we took the command that we use to compile Apollo on CI:
 NODE_ENV=production webpack --progress --config ./config/webpack/production.js
 ```
 
-And stuck it into our `package.json`:
+And stuck it into our `package.json` as a script:
 ```JSON
 {
   "scripts": {
@@ -49,14 +66,14 @@ And stuck it into our `package.json`:
 }
 ```
 
-This allowed us run our Webpack compilation by simply typing `yarn build:webpack`.
+This allowed us run our Webpack compilation simply by typing `yarn build:webpack`.
 
 With Webpack running, we opened up another terminal window and executed:
 ```
 ps ufaxww
 ```
 
-`ps` is a Unix utility for printing out a snapshot of all active processes. By passing `ufaxww`, the output will show you the details of all active processes and also group together parent-child processes.
+`ps` is a Unix utility for printing out a snapshot of all active processes. By passing `ufaxww`, the output will show you the details of all active processes and also group together parents with their child processes.
 
 For example, here is the output we saw when we ran this command, truncated to focus on Webpack-related processes:
 
@@ -69,7 +86,7 @@ vagrant   3634 27.5  5.6 1151908 345332 pts/0  Sl+  17:45   0:11           \_ /u
 
 The sixth column from the left represents the amount of physical memory (in kb) being consumed by the process on that line. The first two lines are actually generated by `yarn`, which we were using to execute the `build:webpack` command. The third line is the actual Webpack process. The forth line is a parallel process spawned by a plugin called `fork-ts-checker-webpack-plugin` which we use to try and speed up our build. All in all, Webpack was consuming roughly 944mb of memory when this snapshot was taken.
 
-Now that we had a sense of what is actually running when Webpack begins, we got rid of the extraneous output and asked for a summary statistic instead:
+Now that we had a sense of what was actually running when Webpack begins, we got rid of the extraneous output and asked for a summary statistic instead:
 ```
 ps uax | grep webpack | awk '{s+=$6} END {print s}
 ```
@@ -114,7 +131,7 @@ https://plot.ly/~XiaoChenClio/16/
 
 As you can see, with our current configuration, Webpack finishes compilation in around 120 ~ 130s. At the very most, our Webpack compilation appears to use about 2 million kilobytes (2gb) of memory.
 
-Now that we had an idea of what our Webpack build costs, what could we do? Well, this is where some knowledge about Node came in handy. Node uses V8 and can accept a number of command line options that configure the way V8 behaves. One of these is `--max-old-space-size`. To summarize Irina's [post](https://medium.com/@_lrlna/garbage-collection-in-v8-an-illustrated-guide-d24a952ee3b8), V8's memory management strategy divides up the heap into two parts: old space and new space. Objects in the old space are not subject to the frequent scavenging that occurs in the new space and are only garbage-collected when its capacity is reached. Therefore, if you set a lower capacity on the old space than the V8 default, it should lead to more garbage collections, albeit at the cost of total runtime. `--max-old-space-size` accepts a single number, interpreted as the maximum size of the old space in megabytes.
+Now that we had an idea of what our Webpack build costs, what could we do? Well, this is where some knowledge about Node came in handy. Node uses V8 and can accept a number of command line options that configure the way V8 behaves. One of these is `--max-old-space-size`. To summarize Irina's [post](https://medium.com/@_lrlna/garbage-collection-in-v8-an-illustrated-guide-d24a952ee3b8), V8's memory management strategy divides up the heap into two parts: old space and new space. Objects in the old space are not subject to the frequent scavenging that occurs in the new space and are only garbage-collected when its capacity is reached. Therefore, if you set a lower capacity on the old space than the V8 default, it should cause more garbage collections, which means less memory used throughout compilation. `--max-old-space-size` accepts a single number, interpreted as the maximum size of the old space in megabytes.
 
 So, with this knowledge, we changed our `build:webpack` command so that we can control the size of the old space:
 
@@ -127,45 +144,33 @@ We tried three different values for `SIZE`: 1024, 896 and 768. Our project compi
 ![Webpack Memory Plot Old Space](assets/plot-old-space.png)
 https://plot.ly/~XiaoChenClio/1/
 
-As we reduced the maximum size of the old space, Webpack took longer to build our project, but the amount of memory it consumed also decreased. We found `--max-old-space-size=1024` to be a sweet spot, as it reduced the the maximum memory used by around 400mb, at the acceptable cost of +10s in total compile time.
+As we reduced the maximum size of the old space, Webpack took longer to build our project because the V8 engine had to spent more time in garbage collection, but the amount of memory it consumed also decreased. We found `--max-old-space-size=1024` to be a sweet spot, as it reduced the the maximum memory used by around 400mb, at the acceptable cost of +10s in total compile time.
 
 It is also worth noting `--max-old-space-size` will have no effect on parallel processes spawned during compilation, such as `fork-ts-checker`. It only affects the immediate Node process it is passed to.
 
-### Key takeaways
+Ultimately, however, the effectiveness of the blackbox methods described above is limited. First, while `profile-memory.js` tells you exactly how much of the system's resources Webpack is using, when used on its own, it doesn't give you any clues as to **why** Webpack needs all of that memory. Second, while limiting the maximum size of the old space can help reduce memory usage, it comes at the cost of longer runtimes and have to be adjusted over time as your project scales and grows.
 
-TODO Make this flow more
-
-1. Good tooling is essential to solving any problem. Without it, you can't properly diagnose a problem nor can you validate different hypotheses
-2. Node let's you control the size of V8's old space; setting it to a lower value can help reduce the amount of memory Webpack takes to compile your project, at the cost of longer compile times.
-
-Admittedly, the effectiveness of the methods described in blackbox approach is limited:
-
-1. While `profile-memory.js` gives you a good high-level overview of your Webpack project, it does not tell you exactly where the memory usage is coming from
-2. While limiting old max space size may help reduce memory usage, it comes at the cost of longer runtimes and also have to be adjusted and increased over time as your project grows
-
-Not satisfied with the blackbox approach? Well, neither were we. To make a medical analogy, if our Webpack memory issue was a sickness, then the blackbox approach has just told us exactly what our symptoms are and what a painkiller might be. But the true cause of our sickness is yet unknown. For that, we will need something more powerful.
+So with the insights that we have gained through the blackbox approach serving as a foundation, we put on our safari hats and plunged deep into the Webpack jungle. It's time for a "whitebox" approach.
 
 ## The Whitebox Approach
 
-Following the blackbox approach, we put on our safari hats and delve deep into our Webpack project. Our plan was, plain and simple, to identify the cause of Webpack's voracious demand for memory. In an ideal world, we would have identified a single issue, perhaps an non-optimized plugin, that both used a lot of memory and for which a straight-forward solution exists. However, if this were the case, I would have told you about it by now.
-
-The reality, as you can tell, didn't turn out so neatly. As opposed to finding that one silver bullet solution, the whitebox approach instead gave us:
-
-* **Three** strategies for identifying memory bottlenecks
-* **Two** domain-specific solutions for reducing memory usage
-* **One** surprising discovery about our Webpack build
-
-And it is these things that I would like to now share with you.
-
-### Key takeaways
+### TL;DR
 
 * Identify and profile memory consumers in your Webpack set-up. Know what pieces incur the heaviest cost and prioritize optimization efforts accordingly.
 * If the time trade-off is acceptable, reduce the number of processes that are running parallel on the same machine
 * Scale horizontally (Across multiple machines) if possible
 
-### Three Strategies
+In the whitebox approach, we "upacked" our Webpack project in search of one thing and one thing only: the cause of Webpack's voracious demand for memory. In an ideal world, we would have identified a single issue, perhaps an non-optimized plugin, that both used a lot of memory and for which a better-optimized alternative exists. However, if this were the case, I would have told you about it by now.
 
-Continuing with the safari analogy, you might think of these strategies as the "tracks" we followed in our hunt. Not all of them led to solutions, but each approached the memory issue from a different angle and, as a result, deserves to be mentioned here.
+The reality, as you can tell, didn't turn out so neatly. As opposed to finding that one silver bullet solution, our safari instead yielded:
+
+* **Three** strategies for identifying memory bottlenecks
+* **One** project-specific solutions for reducing memory usage
+* **One** surprising discovery about our Webpack build
+
+### Three Whitebox Strategies
+
+#### 1: Profiling plugins and loaders
 
 In our first strategy, we examined the way we configured Webpack. Generally speaking, a Webpack project is configurable in three different ways: by adjusting Webpack's native options, by adding custom plugins, and by adding custom loaders. In our case, since we did not see anything suspicious with our native options, we focused on our plugins and loaders instead.
 
@@ -176,7 +181,7 @@ For example, one of the plugins we were using was the [ForkTsCheckerWebpackPlugi
 ![Webpack Memory No Fork](assets/plot-fork-ts.png)
 https://plot.ly/~XiaoChenClio/12
 
-As surprising as this result was, it was also somewhat of a red herring. Without ForkTsChecker, we not only saw maximum memory usage decrease by around 200mb, but also a reduction of the total compile time by around 20s. However, This was purely due to the fact that, without ForkTsChecker and without turning back on typeschecking in ts-loader, Webpack was no longer performing any form of typechecking during compilation. Of course, we couldn't just forgo typechecking all-together, but this discovery did give us an idea that will be elaborated on shortly.
+As surprising as this result was, it was also somewhat of a red herring. Without ForkTsChecker, not only was maximum memory usage lowered by around 200mb, but the total compile time was also about 20s shorter. However, This was purely due to the fact that, without ForkTsChecker and without re-enabling typeschecking in `ts-loader`, Webpack was no longer performing any form of typechecking during compilation. Of course, we couldn't just forgo typechecking all-together, but this discovery did give us an idea that will be elaborated upon shortly.
 
 For the record, we also found [SourceMapDevToolPlugin](https://webpack.js.org/plugins/source-map-dev-tool-plugin/) and [UglifyjsWebpackPlugin](https://webpack.js.org/plugins/uglifyjs-webpack-plugin/) to be heavy consumers of memory as well. But we couldn't find a good way to use this information.
 
@@ -199,7 +204,9 @@ module.exports = {
 }
 ```
 
-The results of these tests, however, were not as useful as the plugins beforehand. We found that the loaders that incurred the heaviest memory tax were our TypeScript, CoffeeScript, and Sass loaders, but this was largely due to fact that these were the most common types of files in our project. We couldn't really replace these loaders: doing so would most likely achieve little, and it puts us at risk of breaking our app. So, the information, as interesting as it were, gave us little to actually work with.
+The results of these tests, however, were not as useful as the plugins beforehand. We found that the loaders that incurred the heaviest memory tax were our TypeScript, CoffeeScript, and Sass loaders, but this was largely due to fact that these were the most common types of files in our project. We couldn't really replace these loaders: doing so would most likely achieve little, and comes with the risk of hard-to-detect breakages.
+
+#### 2: What's in the bundle?
 
 So let's talk about the second strategy, which focuses instead on the actual bundles that Webpack generates. Here, we started by using the [Webpack Bundle Analyzer](https://github.com/webpack-contrib/webpack-bundle-analyzer) to visualize the shapes and sizes of our final, compiled bundles.
 
@@ -207,9 +214,9 @@ The graph that we received from the Analyzer was very telling:
 
 ![Bundles analyzed](assets/bundles-analyzed.png)
 
-The majority of our bundled JavaScript assets, as it turned out, came from our `node_modules` folder! What's more, within the code from `node_modules`, the largest part was by far from `lib-ThemisUI`. `lib-ThemisUI` is an internal components library that we have created for our web app. It is not a complex components library, and really should not take up such a large part of our bundled assets.
+The majority of our bundled JavaScript assets, as it turned out, came from our `node_modules` folder! What's more, within the code from `node_modules`, the largest part was by far from `lib-ThemisUI`, an internal component library that we created for our app.
 
-Now that we had a suspect on our hands, we wanted to see what would happen to our compilation if we were to take `lib-ThemisUI` out of the equation. To do this, we used Webpack's [IgnorePlugin](https://webpack.js.org/plugins/ignore-plugin/) to ignore all attempts to include code from `lib-ThemisUI`:
+Intrigued, we wanted to see what would happen to our compilation if we were to take `lib-ThemisUI` out of the picture. To do this, we used Webpack's [IgnorePlugin](https://webpack.js.org/plugins/ignore-plugin/) to ignore all attempts to anything from `lib-ThemisUI`:
 
 ```js
 // webpack configuration snippet
@@ -222,15 +229,79 @@ module.exports = {
 }
 ```
 
-With `lib-ThemisUI` out of the picture, we profiled our compilation again and recorded the results (If you are wondering why the compile times are faster, it's because these tests were ran on a slightly faster machine than the other tests):
+ We profiled our compilation again and recorded the results (If you are wondering why the compile times are faster, it's because these tests were ran on a slightly faster machine than the previous tests):
 
 ![No ThemisUI](assets/plot-no-themisui.png)
 https://plot.ly/~XiaoChenClio/28/
 
-In terms of memory, we saw the maximum memory used by Webpack decrease by around 150mb. The runtime difference is also worth noting: without `lib-ThemisUI`, total compilation time decreased by around 15s. On the surface, these results may not seem significant, that is until you consider the fact that `lib-ThemisUI` should be a simple, run-of-the-mill component library.
+Without processing the files from `lib-ThemisUI`, we saw a reduction in both compilation time (-15s) and maximum memory used (-150mb). But even more interestingly, you can see that the curves of the two compilations are almost identical up until around 75s (x=750) into compilation. This, incidentally, was when Webpack started performing output-optimization tasks like uglification and source map generation.
 
-The reason why `lib-ThemisUI` taxes us this heavily is because it is a *huge* import: As you can see, the curves of the two compilations are almost identical up until around x=750. This, incidentally, is when the things like uglification and source-map generation begins. Because `lib-ThemisUI` is being included, it too has to undergo this process. The sheer size of the import leads directly to greater consumption of memory and a longer compile time.
+What was happening? Well, when our app includes `lib-ThemisUI`, it is actually consuming several bundled files as opposed to the actual source code for our component library. Therefore, the files from `lib-ThemisUI` does not really play a major role for most of the compilation process. But, because they ultimately get included in the assets generated, the bundled files from `lib-ThemisUI` *does* participate in the output-optimization stage.
 
-Being a component library that merely defines a number of simple UI components like buttons and drop-down menus, we felt that the complexity of `lib-ThemisUI` did not justify its size. So, now that we identified this problem, what did we do? Well, nothing. I mean, we couldn't really do anything immediately. This issue requires us to look into our component library in greater detail and to identify exactly what is making it so large. We looked around for flagrant fouls, but didn't find any. Thus, we put it aside on our TODO list, and proceeded to our final strategy of investigation.
+One possible solution would have been to look for some way to prevent this: to be more specific, we could try to optimize `lib-ThemisUI`'s bundled files separately, and thus take that responsibility (and cost) away from our app's compilation. For a variety of reasons, we decided not to pursue this path for the moment. We felt that the larger issue at hand was the sheer size of our component library: it is, shall we say, abnormal, that our component library is almost the size of our entire application itself. As a result, until we could figure out a way to reduce the size of `lib-ThemisUI`, we decided to put this path on hold.
 
-### Using the Node Inspector
+#### 3. Using Node's inspector
+
+Let's now talk about the last strategy, which is, in my opinion, the fanciest of them all. NodeJS has a pretty awesome [inspect feature](https://nodejs.org/en/docs/guides/debugging-getting-started/) that allow you to connect an inspector of your choice to debug Node applications.
+
+Knowing this, we promptly added an additional command to our `package.json`:
+
+```JSON
+{
+  "scripts": {
+    "profile:webpack": "NODE_ENV=production node --inspect-brk=0.0.0.0:3000 ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js",
+  }
+}
+```
+
+Running `yarn profile:webpack` now gave us the following output:
+
+```
+yarn run v1.9.4
+$ NODE_ENV=production node --inspect-brk=0.0.0.0:3000 ./node_modules/webpack/bin/webpack.js --progress --config ./config/webpack/production.js
+Debugger listening on ws://0.0.0.0:3000/6333b371-51fb-4fec-8729-fc025df01336
+For help, see: https://nodejs.org/en/docs/inspector
+```
+
+With this running in our terminal, we opened up Chrome and accessed `http://0.0.0.0:3000/json/list`. This yielded us a simple response:
+
+```
+[ {
+  "description": "node.js instance",
+  "devtoolsFrontendUrl": "chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=127.0.0.1:3000/e218191b-8335-43ec-80e3-85e3a8da5c4f",
+  "faviconUrl": "https://nodejs.org/static/favicon.ico",
+  "id": "e218191b-8335-43ec-80e3-85e3a8da5c4f",
+  "title": "./node_modules/webpack/bin/webpack.js",
+  "type": "node",
+  "url": "file:///home/shawn/Documents/themis/node_modules/webpack/bin/webpack.js",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:3000/e218191b-8335-43ec-80e3-85e3a8da5c4f"
+} ]
+```
+
+Pasting the value of `devtoolsFrontendUrl` into the address bar, we were greeted with the familiar UI of the Chrome devtools:
+
+![Chrome Devtools Start](assets/chrome-devtools-start.png)
+
+Let's take a moment to appreciate what's happening: We started up a Node process that is going to run Webpack. Then, we opened Chrome and connected to this process. Now, as you can see, we had the Chrome devtools open with the code for Webpack loaded in and ready to go. Once the blue play button is pressed, execution will resume and begin compilation, and we will be able to monitor and debug this process just like any other JavaScript web app! (Props to all those who made this dark magic possible.)
+
+Our focus was, of course, in the Memory tab. This tab gives you two primary ways to monitor the heap of the running process. First, you can take a snapshot of the heap at any moment in time. Second, you can create an allocation timeline, recording how memory on the heap is being allocated/de-allocated. We did both.
+
+First, we ran our compilation from start to finish and took a number of snapshots in-between:
+
+![Chrome Devtools Snapshots](assets/chrome-devtools-snapshots.png)
+
+Unfortunately, the output was a bit confounding. For one, we weren't sure exactly what to make of the numbers beneath each individual snapshot. Of course, this number appears to represent the total size of all objects in the heap at the time the snapshot was taken. But if that were the case, then they seemed way too low. Now, it was comforting to see that the snapshots taken later in the compilation had higher numbers than the earlier ones, but that still doesn't explain why these numbers are so low.
+
+Selecting one of the snapshots will show you a detailed breakdown:
+
+![Chrome Devtools Details](assets/chrome-devtools-details.png)
+
+In the detailed view, the objects in the heap are grouped by their constructor. The column "Shallow Size" can essentially be thought of as the total size of all objects within that group. There are some interesting things here, such as the `(string)` row which contained over 500 thousand individual items: these are the strings that Webpack ultimately concatenates together to form your bundled assets. For our purposes, however, we weren't able to find anything here immediately useful.
+
+The allocation timeline
+
+### One Project-Specific Solution
+
+### One Surprising Discovery
+
+## Bonus Round: Webpacker
