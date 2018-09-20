@@ -6,7 +6,7 @@
 
 ## Introduction
 
-This is the second of a two-part series on how we use Webpack here at Clio. Last time, I talked briefly about the problems we faced running Webpack on our CI provider before transitioning into a exposition on our upgrade path to Webpack v4. The narrative then ended before I had a chance to explain how we actually dealt with our memory issues. In this sequel, I will dive into this memory issue in detail. Welcome to part two, :zap: Electric Boogaloo :zap:.
+This is the second of a two-part series on how we use Webpack here at Clio. Last time, I talked briefly about the problems we faced running Webpack on our CI provider before transitioning into an exposition on our upgrade path to Webpack v4. The narrative then ended before I had a chance to explain how we actually dealt with our memory issues. In this sequel, I will dive into this memory issue in detail. Welcome to part two, :zap: Electric Boogaloo :zap:.
 
 ### Disclaimer
 
@@ -26,8 +26,8 @@ We use Buildkite as our CI provider, and AWS EC2 instances to actually run our C
 
 We have multiple pipelines for doing all sorts of stuff, but the focus of this article is on the compile pipeline, which is used to automatically compile our front-end assets. When Buildkite creates a build, it will allocate an AWS EC2 instance and install an "agent" on this machine. The agent is basically a script that will begin running the processes defined in the pipeline on the machine it was installed on:
 
-1. It clones the Github repo and checks out the commit that triggered the build
-2. It performs a number of preparatory tasks such as installing Node modules
+1. It clones our application repo and checks out the commit that triggered the build
+2. It prepares the build environment, doing things such as installing Node modules
 3. It compiles all of the assets in the Rails asset pipeline (mainly used for our legacy application)
 4. It compiles our revamped application, Apollo, using Webpack
 
@@ -148,29 +148,23 @@ As we reduced the maximum size of the old space, Webpack took longer to build ou
 
 It is also worth noting `--max-old-space-size` will have no effect on parallel processes spawned during compilation, such as `fork-ts-checker`. It only affects the immediate Node process it is passed to.
 
-Ultimately, however, the effectiveness of the blackbox methods described above is limited. First, while `profile-memory.js` tells you exactly how much of the system's resources Webpack is using, when used on its own, it doesn't give you any clues as to **why** Webpack needs all of that memory. Second, while limiting the maximum size of the old space can help reduce memory usage, it comes at the cost of longer runtimes and have to be adjusted over time as your project scales and grows.
+Ultimately, however, the effectiveness of the blackbox methods described above is limited. First, while `profile-memory.js` tells you exactly how much of the system's resources Webpack is using, when used on its own, it doesn't tell you **why** Webpack needs all of that memory. Second, while limiting the maximum size of the old space can help reduce memory usage, it comes at the cost of longer runtimes and have to be adjusted over time as your project scales and grows.
 
-So with the insights that we have gained through the blackbox approach serving as a foundation, we put on our safari hats and plunged deep into the Webpack jungle. It's time for a "whitebox" approach.
+Even though the blackbox approach did not provide us with a satisfactory solution, it still gave us a foundation from which we could dive deeper into the Webpack jungle. Put on your safari hats, it's time for a whitebox approach.
 
 ## The Whitebox Approach
 
 ### TL;DR
 
-* Identify and profile memory consumers in your Webpack set-up. Know what pieces incur the heaviest cost and prioritize optimization efforts accordingly.
+* Identify and profile memory consumers in your Webpack set-up. Know what pieces incur the heaviest cost and prioritize optimization efforts accordingly
 * If the time trade-off is acceptable, reduce the number of processes that are running parallel on the same machine
 * Scale horizontally (Across multiple machines) if possible
 
-In the whitebox approach, we "upacked" our Webpack project in search of one thing and one thing only: the cause of Webpack's voracious demand for memory. In an ideal world, we would have identified a single issue, perhaps an non-optimized plugin, that both used a lot of memory and for which a better-optimized alternative exists. However, if this were the case, I would have told you about it by now.
+In the whitebox approach, we "unpacked" our Webpack project in search of one thing and one thing only: the cause of Webpack's voracious demand for memory. In an ideal world, we would have identified a single issue, perhaps an non-optimized plugin, that both used a lot of memory and for which a more optimized alternative exists. However, if this were the case, I would have told you about it by now.
 
-The reality, as you can tell, didn't turn out so neatly. As opposed to finding that one silver bullet solution, our safari instead yielded:
+The reality, as you can tell, did not turn out so neatly. In this last section, I will show you three different methods you may use to identify memory bottlenecks in a Webpack project. Then, at the very end, I will offer some ideas that may be helpful if you are working with a tight memory constraint.
 
-* **Three** strategies for identifying memory bottlenecks
-* **One** project-specific solutions for reducing memory usage
-* **One** surprising discovery about our Webpack build
-
-### Three Whitebox Strategies
-
-#### 1: Profiling plugins and loaders
+### Method 1: Profiling plugins and loaders
 
 In our first strategy, we examined the way we configured Webpack. Generally speaking, a Webpack project is configurable in three different ways: by adjusting Webpack's native options, by adding custom plugins, and by adding custom loaders. In our case, since we did not see anything suspicious with our native options, we focused on our plugins and loaders instead.
 
@@ -206,7 +200,7 @@ module.exports = {
 
 The results of these tests, however, were not as useful as the plugins beforehand. We found that the loaders that incurred the heaviest memory tax were our TypeScript, CoffeeScript, and Sass loaders, but this was largely due to fact that these were the most common types of files in our project. We couldn't really replace these loaders: doing so would most likely achieve little, and comes with the risk of hard-to-detect breakages.
 
-#### 2: What's in the bundle?
+### Method 2: Profile imports
 
 So let's talk about the second strategy, which focuses instead on the actual bundles that Webpack generates. Here, we started by using the [Webpack Bundle Analyzer](https://github.com/webpack-contrib/webpack-bundle-analyzer) to visualize the shapes and sizes of our final, compiled bundles.
 
@@ -216,7 +210,7 @@ The graph that we received from the Analyzer was very telling:
 
 The majority of our bundled JavaScript assets, as it turned out, came from our `node_modules` folder! What's more, within the code from `node_modules`, the largest part was by far from `lib-ThemisUI`, an internal component library that we created for our app.
 
-Intrigued, we wanted to see what would happen to our compilation if we were to take `lib-ThemisUI` out of the picture. To do this, we used Webpack's [IgnorePlugin](https://webpack.js.org/plugins/ignore-plugin/) to ignore all attempts to anything from `lib-ThemisUI`:
+Intrigued, we wanted to see what would happen to our compilation if we were to take `lib-ThemisUI` out of the picture. To do this, we used Webpack's [IgnorePlugin](https://webpack.js.org/plugins/ignore-plugin/) to ignore all attempts to import anything from `lib-ThemisUI`:
 
 ```js
 // webpack configuration snippet
@@ -240,9 +234,9 @@ What was happening? Well, when our app includes `lib-ThemisUI`, it is actually c
 
 One possible solution would have been to look for some way to prevent this: to be more specific, we could try to optimize `lib-ThemisUI`'s bundled files separately, and thus take that responsibility (and cost) away from our app's compilation. For a variety of reasons, we decided not to pursue this path for the moment. We felt that the larger issue at hand was the sheer size of our component library: it is, shall we say, abnormal, that our component library is almost the size of our entire application itself. As a result, until we could figure out a way to reduce the size of `lib-ThemisUI`, we decided to put this path on hold.
 
-#### 3. Using Node's inspector
+### Method 3: Profile using Node's inspector
 
-Let's now talk about the last strategy, which is, in my opinion, the fanciest of them all. NodeJS has a pretty awesome [inspect feature](https://nodejs.org/en/docs/guides/debugging-getting-started/) that allow you to connect an inspector of your choice to debug Node applications.
+Let's now talk about the last strategy, which is, in my opinion, the fanciest of them all. NodeJS has a pretty awesome [inspect feature](https://nodejs.org/en/docs/guides/debugging-getting-started/) that allows you to connect an inspector of your choice to debug Node applications.
 
 Knowing this, we promptly added an additional command to our `package.json`:
 
@@ -282,11 +276,12 @@ Pasting the value of `devtoolsFrontendUrl` into the address bar, we were greeted
 
 ![Chrome Devtools Start](assets/chrome-devtools-start.png)
 
-Let's take a moment to appreciate what's happening: We started up a Node process that is going to run Webpack. Then, we opened Chrome and connected to this process. Now, as you can see, we had the Chrome devtools open with the code for Webpack loaded in and ready to go. Once the blue play button is pressed, execution will resume and begin compilation, and we will be able to monitor and debug this process just like any other JavaScript web app! (Props to all those who made this dark magic possible.)
+Let's take a moment to appreciate what's happening: We started up a Node process that is going to run Webpack. Then, we opened Chrome and connected to this process. Now, as you can see, we had the Chrome devtools open with the code for Webpack loaded in and ready to go. Once the blue play button is pressed, compilation will begin, and we will be able to monitor and debug Webpack just like any other JavaScript web app! (Props to all those who made this dark magic possible.)
 
-Our focus was, of course, in the Memory tab. This tab gives you two primary ways to monitor the heap of the running process. First, you can take a snapshot of the heap at any moment in time. Second, you can create an allocation timeline, recording how memory on the heap is being allocated/de-allocated. We did both.
+Our focus was, of course, in the Memory tab.
+![Chrome Memory Tab](assets/chrome-devtools-memory.png)
 
-First, we ran our compilation from start to finish and took a number of snapshots in-between:
+As you can see, Chrome gives you several ways to monitor the heap of the running process. For our purposes, we first tried the heap snapshot option. This allowed us to capture and preserve exactly what the heap looked like at various moments throughout compilation (Earlier snapshots listed first):
 
 ![Chrome Devtools Snapshots](assets/chrome-devtools-snapshots.png)
 
@@ -296,12 +291,31 @@ Selecting one of the snapshots will show you a detailed breakdown:
 
 ![Chrome Devtools Details](assets/chrome-devtools-details.png)
 
-In the detailed view, the objects in the heap are grouped by their constructor. The column "Shallow Size" can essentially be thought of as the total size of all objects within that group. There are some interesting things here, such as the `(string)` row which contained over 500 thousand individual items: these are the strings that Webpack ultimately concatenates together to form your bundled assets. For our purposes, however, we weren't able to find anything here immediately useful.
+In the detailed view, the objects in the heap are grouped by their constructor. The column "Shallow Size" can essentially be thought of as the total size of all the objects within that group. There are some interesting things here, such as the `(string)` row which contained over 500 thousand individual items: these were the strings that Webpack eventually concatenates together to form your bundled assets.
 
-The allocation timeline
+Unfortunately, aside from giving us a (perhaps accurate) view into the heap, we weren't able to gleam much more from these snapshots. The verbosity of the output made it difficult to extract any useful information.
 
-### One Project-Specific Solution
+The allocation timeline also provides an interesting view into your Webpack build, As the name suggests, it gives you the ability to record memory activity over a small period of time, providing you with a view of what parts of the Webpack compilation is allocating/deallocating and when they are doing it. But, similar to the heap snapshots, we found it difficult to read the output from this as well.
 
-### One Surprising Discovery
+### Working with memory constraints
 
-## Bonus Round: Webpacker
+So, what can you do to try and deal with memory constraints? If you cannot immediately decrease the amount of memory needed to compile, there are two ways to work around it:
+
+* Find opportunities to parallelize processes onto different machines
+* Find opportunities to flatten processes on the same machine
+
+Let me give you an example of each.
+
+Most Webpack projects will use various loaders to perform pre-processing on the source files before they are actually concatenated together to form the final bundled asset files. Some loaders may not transform the source code, but simply perform a series of validations (Think linters, for example). Some of these validations do not actually need to be ran in order for Webpack to compile. If this is the case, then you might have an opportunity to parallelize.
+
+For example, we saw earlier how Webpack was still able to compile after we have disabled Typescript typechecking entirely. Knowing this, we recognized a parallelization opportunity:
+1. Disable typechecking in the compile pipeline
+2. Create a separate step within the compile pipeline that simply does typechecking.
+
+With this set-up, we were able to remove the costs of Typescript typechecking from our main compilation step, which runs on one machine, and separate it out onto a different step, which runs on another machine. This way, we still have all of the benefits of typechecking, without worrying about the costs that it incurs on compilation.
+
+What about flattening processes? What does that mean? It's actually fairly simple: do not run any processes concurrently unless you have to. For example, we use the `webpacker` gem to integrate a Webpack-based front-end into a Rails-based back-end. By using `webpacker`, we are able to compile both our legacy application and Apollo by running `assets:precompile`.
+
+On the machine, this would first begin a Ruby process that compiles the legacy assets, then a Node process that runs Webpack. We discovered, however, that when the legacy compilation has completed and Webpack has started, the Ruby process still hung around and consumed a chunk of memory even though it no longer had any good reason to do so. As such, we removed Webpack from `assets:precompile` by using an [env variable](https://github.com/rails/webpacker/blob/master/CHANGELOG.md#added-gem-1), and ran Webpack separately. This way, the Ruby process will end before Webpack begins.
+
+## Conclusions
