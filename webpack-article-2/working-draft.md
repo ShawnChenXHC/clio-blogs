@@ -318,4 +318,8 @@ What about flattening processes? What does that mean? It's actually fairly simpl
 
 On the machine, this would first begin a Ruby process that compiles the legacy assets, then a Node process that runs Webpack. We discovered, however, that when the legacy compilation has completed and Webpack has started, the Ruby process still hung around and consumed a chunk of memory even though it no longer had any good reason to do so. As such, we removed Webpack from `assets:precompile` by using an [env variable](https://github.com/rails/webpacker/blob/master/CHANGELOG.md#added-gem-1), and ran Webpack separately. This way, the Ruby process will end before Webpack begins.
 
-## Conclusions
+## Conclusion
+
+Whew, that took a while. Thanks for sticking with me, I will make this short and sweet.
+
+So, ultimately, we didn't really "solve" our memory issue. In many ways, this article was more about various different ways to profile Webpack's memory performance. Perhaps the constraints that we were setting on ourselves are unrealistic, maybe Webpack really needed that much memory in order to finish, but this exercise in memory optimization nevertheless revealed valuable information about our project that we did not have before. Hope you liked it.
